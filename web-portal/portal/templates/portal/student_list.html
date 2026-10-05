@@ -1,0 +1,57 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Sinh viên{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Danh sách sinh viên</h1>
+    <a href="{% url 'student_create' %}" class="btn btn-primary">Thêm sinh viên</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-4">
+        <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Tìm theo mã SV, họ tên, email, lớp...">
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-primary">Tìm kiếm</button>
+        {% if q %}<a href="{% url 'student_list' %}" class="btn btn-outline-secondary">Bỏ lọc</a>{% endif %}
+    </div>
+</form>
+
+<table class="table table-bordered table-hover bg-white">
+    <thead>
+        <tr>
+            <th style="width: 60px">STT</th>
+            <th>Mã SV</th>
+            <th>Họ tên</th>
+            <th>Email</th>
+            <th>Lớp</th>
+            <th>Ngành</th>
+            <th style="width: 130px">Thao tác</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in students %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ s.student_code }}</td>
+                <td>{{ s.full_name }}</td>
+                <td>{{ s.email }}</td>
+                <td>{{ s.class_name }}</td>
+                <td>{{ s.major }}</td>
+                <td>
+                    <a href="{% url 'student_edit' s.id %}" class="btn btn-sm btn-outline-primary">Sửa</a>
+                    <form method="post" action="{% url 'student_delete' s.id %}" class="d-inline"
+                          onsubmit="return confirm('Xóa sinh viên {{ s.student_code|escapejs }} - {{ s.full_name|escapejs }}?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Xóa</button>
+                    </form>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="7" class="text-center text-muted">Không có sinh viên nào.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div class="text-muted small">Tổng: {{ students|length }} sinh viên</div>
+{% endblock %}

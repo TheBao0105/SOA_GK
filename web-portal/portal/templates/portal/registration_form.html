@@ -1,0 +1,25 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Đăng ký đề tài{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">Đăng ký đề tài</h1>
+
+<div class="card" style="max-width: 600px">
+    <div class="card-body">
+        {% include "portal/_form_errors.html" %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+                {% include "portal/_field.html" %}
+            {% endfor %}
+            <p class="text-muted small">
+                Khi lưu, Registration Service sẽ gọi Student Service và Thesis Service để kiểm tra
+                sinh viên, đề tài, trạng thái đề tài và số lượng sinh viên tối đa.
+            </p>
+            <a href="{% url 'registration_list' %}" class="btn btn-secondary">Hủy</a>
+            <button type="submit" class="btn btn-primary">Lưu</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

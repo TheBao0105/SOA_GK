@@ -1,0 +1,38 @@
+{% extends "portal/base.html" %}
+
+{% block title %}API Docs{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">API Docs</h1>
+
+<p>Hệ thống gồm 3 service độc lập, mỗi service có database riêng và giao tiếp với nhau qua HTTP/REST.
+   Trang web này cũng chỉ gọi REST API của 3 service, không kết nối trực tiếp tới database nào.</p>
+
+<table class="table table-bordered bg-white">
+    <thead>
+        <tr>
+            <th>Service</th>
+            <th>Chức năng</th>
+            <th>Địa chỉ</th>
+            <th>Database</th>
+            <th>Trạng thái</th>
+            <th>Swagger</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in services %}
+            <tr>
+                <td>{{ s.name }}</td>
+                <td>{{ s.desc }}</td>
+                <td><code>{{ s.url }}</code></td>
+                <td><code>{{ s.db }}</code></td>
+                <td>
+                    {% if s.online %}<span class="badge text-bg-success">Hoạt động</span>
+                    {% else %}<span class="badge text-bg-danger">Không hoạt động</span>{% endif %}
+                </td>
+                <td><a href="{{ s.url }}/api/docs/" target="_blank">{{ s.url }}/api/docs/</a></td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Đăng ký{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Danh sách đăng ký đề tài</h1>
+    <a href="{% url 'registration_create' %}" class="btn btn-primary">Đăng ký đề tài</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select name="student_id" class="form-select">
+            <option value="">-- Tất cả sinh viên --</option>
+            {% for s in students %}
+                <option value="{{ s.id }}" {% if filters.student_id == s.id|stringformat:"s" %}selected{% endif %}>{{ s.student_code }} - {{ s.full_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select name="thesis_id" class="form-select">
+            <option value="">-- Tất cả đề tài --</option>
+            {% for t in theses %}
+                <option value="{{ t.id }}" {% if filters.thesis_id == t.id|stringformat:"s" %}selected{% endif %}>{{ t.thesis_code }} - {{ t.title }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select name="status" class="form-select">
+            <option value="">-- Tất cả trạng thái --</option>
+            {% for value, label in statuses %}
+                <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-primary">Lọc</button>
+        {% if filters %}<a href="{% url 'registration_list' %}" class="btn btn-outline-secondary">Bỏ lọc</a>{% endif %}
+    </div>
+</form>
+
+<table class="table table-bordered table-hover bg-white">
+    <thead>
+        <tr>
+            <th style="width: 60px">STT</th>
+            <th>Sinh viên</th>
+            <th>Đề tài</th>
+            <th>Ngày đăng ký</th>
+            <th>Trạng thái</th>
+            <th style="width: 200px">Thao tác</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in registrations %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>
+                    {% if r.student %}{{ r.student.student_code }} - {{ r.student.full_name }}
+                    {% else %}<span class="text-muted">Sinh viên #{{ r.student_id }}</span>{% endif %}
+                </td>
+                <td>
+                    {% if r.thesis %}{{ r.thesis.thesis_code }} - {{ r.thesis.title }}
+                    {% else %}<span class="text-muted">Đề tài #{{ r.thesis_id }}</span>{% endif %}
+                </td>
+                <td>{{ r.registered_at|date:"d/m/Y H:i" }}</td>
+                <td>
+                    {% if r.status == "APPROVED" %}<span class="badge text-bg-success">Đã duyệt</span>
+                    {% elif r.status == "REJECTED" %}<span class="badge text-bg-danger">Từ chối</span>
+                    {% else %}<span class="badge text-bg-warning">Chờ duyệt</span>{% endif %}
+                </td>
+                <td>
+                    {% if r.status != "APPROVED" %}
+                        <form method="post" action="{% url 'registration_status' r.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="status" value="APPROVED">
+                            <button type="submit" class="btn btn-sm btn-outline-success">Duyệt</button>
+                        </form>
+                    {% endif %}
+                    {% if r.status != "REJECTED" %}
+                        <form method="post" action="{% url 'registration_status' r.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="status" value="REJECTED">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary">Từ chối</button>
+                        </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'registration_delete' r.id %}" class="d-inline"
+                          onsubmit="return confirm('Xóa đăng ký này?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Xóa</button>
+                    </form>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="6" class="text-center text-muted">Không có đăng ký nào.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div class="text-muted small">Tổng: {{ registrations|length }} đăng ký</div>
+{% endblock %}

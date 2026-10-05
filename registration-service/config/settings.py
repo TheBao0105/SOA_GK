@@ -1,0 +1,108 @@
+"""
+Cấu hình Django cho REGISTRATION SERVICE (port 8003).
+
+Mọi thông tin nhạy cảm (database, secret key) được đọc từ file .env,
+không hard-code trong code.
+"""
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Đọc biến môi trường từ file .env nằm cùng thư mục manage.py
+load_dotenv(BASE_DIR / ".env")
+
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-registration-service")
+DEBUG = os.getenv("DEBUG", "True") == "True"
+ALLOWED_HOSTS = ["*"]
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    # Thư viện bên thứ ba
+    "rest_framework",
+    "drf_spectacular",
+    # App của service
+    "registrations",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = "config.wsgi.application"
+
+# Registration Service CHỈ kết nối tới database của chính nó: registration_db
+# (KHÔNG kết nối tới student_db hay thesis_db)
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("DB_NAME", "registration_db"),
+        "USER": os.getenv("DB_USER", "postgres"),
+        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "HOST": os.getenv("DB_HOST", "localhost"),
+        "PORT": os.getenv("DB_PORT", "5432"),
+    }
+}
+
+AUTH_PASSWORD_VALIDATORS = []
+
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "Asia/Ho_Chi_Minh"
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = "static/"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Django REST Framework: bài demo không yêu cầu đăng nhập
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "UNAUTHENTICATED_USER": None,
+}
+
+# Swagger (drf-spectacular)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Registration Service API",
+    "DESCRIPTION": "Dịch vụ quản lý ĐĂNG KÝ đề tài (SOA demo - port 8003). Gọi Student Service và Thesis Service qua HTTP/REST.",
+    "VERSION": "1.0.0",
+}
+
+# Địa chỉ các service khác - Registration Service chỉ biết URL (HTTP/REST),
+# không biết gì về database của chúng.
+STUDENT_SERVICE_URL = os.getenv("STUDENT_SERVICE_URL", "http://127.0.0.1:8001")
+THESIS_SERVICE_URL = os.getenv("THESIS_SERVICE_URL", "http://127.0.0.1:8002")
+
+# Timeout (giây) cho mỗi HTTP request gọi sang service khác
+EXTERNAL_API_TIMEOUT = float(os.getenv("EXTERNAL_API_TIMEOUT", "5"))

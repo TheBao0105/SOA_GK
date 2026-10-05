@@ -1,0 +1,21 @@
+{% extends "portal/base.html" %}
+
+{% block title %}{% if is_edit %}Sửa sinh viên{% else %}Thêm sinh viên{% endif %}{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">{% if is_edit %}Sửa sinh viên{% else %}Thêm sinh viên{% endif %}</h1>
+
+<div class="card" style="max-width: 600px">
+    <div class="card-body">
+        {% include "portal/_form_errors.html" %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+                {% include "portal/_field.html" %}
+            {% endfor %}
+            <a href="{% url 'student_list' %}" class="btn btn-secondary">Hủy</a>
+            <button type="submit" class="btn btn-primary">Lưu</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
