@@ -1,8 +1,8 @@
-# Hệ thống quản lý đồ án tốt nghiệp — Demo SOA (Django + DRF + PostgreSQL)
+# Hệ thống quản lý đồ án tốt nghiệp — Demo SOA (Django + DRF + SQL Server)
 
 ## 1. Giới thiệu
 
-Project demo giữa kỳ môn **Công nghệ phần mềm**. Khoa cần quản lý việc sinh viên đăng ký đề tài đồ án tốt nghiệp.
+Project giữa kỳ môn **Công nghệ Web 2026**, xây dựng hệ thống quản lý việc sinh viên đăng ký đề tài đồ án tốt nghiệp.
 
 Hệ thống được xây dựng theo **kiến trúc hướng dịch vụ (SOA)**: gồm **3 Web Service độc lập**, mỗi service có database riêng và giao tiếp với nhau qua **HTTP/REST (JSON)**.
 
@@ -42,9 +42,10 @@ Hệ thống được xây dựng theo **kiến trúc hướng dịch vụ (SOA)
 
 ## 3. Công nghệ sử dụng
 
-- Python 3.12+ (đã chạy thử với Python 3.14)
+- Python 3.13 (phiên bản của môi trường `.venv` hiện tại)
 - Django, Django REST Framework
-- PostgreSQL (driver `psycopg` 3)
+- Microsoft SQL Server Express (`.\SQLEXPRESS`, Windows Authentication)
+- ODBC Driver 17 for SQL Server
 - `requests` — Registration Service dùng để gọi HTTP sang các service khác
 - `drf-spectacular` — sinh tài liệu OpenAPI + Swagger UI
 - `python-dotenv` — đọc cấu hình từ file `.env`
@@ -52,7 +53,7 @@ Hệ thống được xây dựng theo **kiến trúc hướng dịch vụ (SOA)
 ## 4. Cấu trúc project
 
 ```
-Demo_GK/
+SOA_GK/
 ├── README.md
 ├── student-service/                  # Port 8001 - student_db
 │   ├── manage.py
@@ -96,9 +97,11 @@ Demo_GK/
 └── run_all.bat                       # Mở 4 cửa sổ chạy 4 service cùng lúc
 ```
 
-## 5. Cấu hình PostgreSQL
+## 5. Cấu hình SQL Server
 
-Mỗi service đọc cấu hình từ file `.env` của riêng nó (không hard-code trong code). Tạo `.env` từ `.env.example`:
+Các service hiện được cấu hình để kết nối SQL Server Express tại instance `.\SQLEXPRESS` bằng Windows Authentication. Cài SQL Server Express và ODBC Driver 17 for SQL Server, đồng thời bảo đảm dịch vụ SQL Server của instance `SQLEXPRESS` đang chạy.
+
+Tạo các file `.env` từ file mẫu:
 
 ```powershell
 copy student-service\.env.example       student-service\.env
@@ -107,30 +110,18 @@ copy registration-service\.env.example  registration-service\.env
 copy web-portal\.env.example            web-portal\.env
 ```
 
-Sửa `DB_PASSWORD` cho đúng mật khẩu PostgreSQL trên máy. Ví dụ `student-service/.env`:
+Các giá trị `DB_USER`, `DB_PASSWORD`, `DB_HOST` và `DB_PORT` trong file `.env.example` là cấu hình cũ; mã hiện tại không dùng chúng để kết nối database. Kết nối được khai báo trong `config/settings.py` của từng service với `HOST = .\SQLEXPRESS` và `Trusted_Connection = yes`. Web Portal không kết nối database.
 
-```
-DB_NAME=student_db
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_HOST=localhost
-DB_PORT=5432
-```
-
-`registration-service/.env` có thêm địa chỉ các service khác:
+`registration-service/.env` và `web-portal/.env` vẫn dùng các biến URL sau để gọi các service qua HTTP:
 
 ```
 STUDENT_SERVICE_URL=http://127.0.0.1:8001
 THESIS_SERVICE_URL=http://127.0.0.1:8002
 ```
 
-## 6. Tạo database
+## 6. Tạo database SQL Server
 
-Một PostgreSQL server, 3 database riêng. Dùng `psql` (hoặc pgAdmin):
-
-```powershell
-& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost
-```
+Tạo 3 database riêng trên instance `SQLEXPRESS`. Có thể mở **SQL Server Management Studio (SSMS)**, kết nối tới `.\SQLEXPRESS` bằng **Windows Authentication**, chọn **New Query** rồi chạy:
 
 ```sql
 CREATE DATABASE student_db;
@@ -138,12 +129,14 @@ CREATE DATABASE thesis_db;
 CREATE DATABASE registration_db;
 ```
 
+Nếu dùng instance hoặc phương thức xác thực khác, cập nhật cấu hình tương ứng trong `config/settings.py` của từng service.
+
 ## 7. Cài requirements
 
 Dùng một virtualenv chung ở thư mục gốc (mỗi service vẫn có `requirements.txt` riêng):
 
 ```powershell
-cd D:\SOA\Demo_GK
+# Thực hiện các lệnh sau tại thư mục gốc SOA_GK
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r student-service\requirements.txt -r thesis-service\requirements.txt -r registration-service\requirements.txt -r web-portal\requirements.txt
@@ -307,7 +300,7 @@ Thử lỗi validation (trùng mã, email sai):
 ```
 → `400` `{"student_code": ["student with this student code already exists."], "email": ["Enter a valid email address."]}`
 
-**2. Tìm kiếm** — `GET /api/students/?search=Nguyen` → ra "Nguyễn Văn An" (tìm không dấu nhờ hàm `unaccent` của PostgreSQL).
+**2. Tìm kiếm** — `GET /api/students/?search=Nguyen` → tìm sinh viên theo từ khóa.
 
 **3. Sửa / xóa** — `PATCH /api/students/4/` với `{"class_name": "CNTT3"}`; `DELETE /api/students/4/` → `204`.
 
