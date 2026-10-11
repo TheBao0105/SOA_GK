@@ -4,6 +4,7 @@ Cấu hình Django cho STUDENT SERVICE (port 8001).
 Mọi thông tin nhạy cảm (database, secret key) được đọc từ file .env,
 không hard-code trong code.
 """
+
 import os
 from pathlib import Path
 
@@ -25,7 +26,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.postgres",  # dùng hàm unaccent để tìm kiếm không dấu
     # Thư viện bên thứ ba
     "rest_framework",
     "drf_spectacular",
@@ -63,16 +63,20 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # Student Service CHỈ kết nối tới database của chính nó: student_db
+
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": "mssql",
         "NAME": os.getenv("DB_NAME", "student_db"),
-        "USER": os.getenv("DB_USER", "postgres"),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "5432"),
+        "HOST": r".\SQLEXPRESS",
+        "PORT": "",
+        "Trusted_Connection": "yes",
+        "OPTIONS": {
+            "driver": "ODBC Driver 17 for SQL Server",
+        },
     }
 }
+
 
 AUTH_PASSWORD_VALIDATORS = []
 

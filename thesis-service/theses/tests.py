@@ -34,11 +34,19 @@ class ThesisAPITests(APITestCase):
         self.assertEqual(len(response.data), 1)
 
     def test_search_theses(self):
+        # Tim theo tu khoa co trong description
         response = self.client.get(self.list_url, {"search": "web"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        response = self.client.get(self.list_url, {"search": "thu vien"})
+
+        # Tim theo ma de tai
+        response = self.client.get(self.list_url, {"search": "DT001"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
+
+        # Tu khoa khong ton tai
         response = self.client.get(self.list_url, {"search": "blockchain"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 0)
 
     def test_thesis_detail(self):
@@ -65,7 +73,9 @@ class ThesisAPITests(APITestCase):
         self.assertEqual(self.thesis.max_students, 3)
 
     def test_update_thesis_patch_close(self):
-        response = self.client.patch(self.detail_url, {"status": "CLOSED"}, format="json")
+        response = self.client.patch(
+            self.detail_url, {"status": "CLOSED"}, format="json"
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.thesis.refresh_from_db()
         self.assertEqual(self.thesis.status, "CLOSED")

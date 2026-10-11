@@ -4,6 +4,7 @@ Cấu hình Django cho REGISTRATION SERVICE (port 8003).
 Mọi thông tin nhạy cảm (database, secret key) được đọc từ file .env,
 không hard-code trong code.
 """
+
 import os
 from pathlib import Path
 
@@ -65,12 +66,14 @@ WSGI_APPLICATION = "config.wsgi.application"
 # (KHÔNG kết nối tới student_db hay thesis_db)
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME", "registration_db"),
-        "USER": os.getenv("DB_USER", "postgres"),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "localhost"),
-        "PORT": os.getenv("DB_PORT", "5432"),
+        "ENGINE": "mssql",
+        "NAME": "registration_db",
+        "HOST": r".\SQLEXPRESS",
+        "PORT": "",
+        "Trusted_Connection": "yes",
+        "OPTIONS": {
+            "driver": "ODBC Driver 17 for SQL Server",
+        },
     }
 }
 
