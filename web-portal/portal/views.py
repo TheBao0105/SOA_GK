@@ -14,6 +14,9 @@ from . import api_client as api
 from .api_client import ApiError, NotFound, ServiceUnavailable
 from .forms import RegistrationForm, StudentForm, ThesisForm, translate_error
 
+from accounts.decorators import role_required
+from accounts.roles import QUAN_TRI, GIANG_VIEN, SINH_VIEN
+
 
 def fetch(request, func, *args, default=None):
     """Gọi API; nếu service đang tắt thì báo lỗi lên giao diện và trả về default."""
@@ -34,6 +37,7 @@ def count_active_registrations(registrations):
 
 
 # ---------------------------------------------------------------- Dashboard
+@role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def dashboard(request):
     students = fetch(request, api.students.list)
     theses = fetch(request, api.theses.list)
@@ -57,6 +61,7 @@ def dashboard(request):
 
 
 # ---------------------------------------------------------------- Sinh viên
+@role_required(QUAN_TRI, GIANG_VIEN)
 def student_list(request):
     q = request.GET.get("q", "").strip()
     students = fetch(request, api.students.list, {"search": q} if q else None, default=[])
@@ -64,7 +69,7 @@ def student_list(request):
         "menu": "students", "students": students, "q": q,
     })
 
-
+@role_required(QUAN_TRI)
 def student_form(request, pk=None):
     if request.method == "POST":
         form = StudentForm(request.POST)
@@ -97,6 +102,7 @@ def student_form(request, pk=None):
 
 
 @require_POST
+@role_required(QUAN_TRI)
 def student_delete(request, pk):
     try:
         api.students.delete(pk)
@@ -109,6 +115,7 @@ def student_delete(request, pk):
 
 
 # ---------------------------------------------------------------- Đề tài
+@role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def thesis_list(request):
     q = request.GET.get("q", "").strip()
     theses = fetch(request, api.theses.list, {"search": q} if q else None, default=[])
@@ -120,7 +127,7 @@ def thesis_list(request):
         "menu": "theses", "theses": theses, "q": q,
     })
 
-
+@role_required(GIANG_VIEN, QUAN_TRI)
 def thesis_form(request, pk=None):
     if request.method == "POST":
         form = ThesisForm(request.POST)
@@ -151,7 +158,7 @@ def thesis_form(request, pk=None):
         "menu": "theses", "form": form, "is_edit": bool(pk),
     })
 
-
+@role_required(GIANG_VIEN, QUAN_TRI)
 @require_POST
 def thesis_delete(request, pk):
     try:
@@ -165,6 +172,7 @@ def thesis_delete(request, pk):
 
 
 # ---------------------------------------------------------------- Đăng ký
+@role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def registration_list(request):
     # Bộ lọc gửi thẳng sang Registration Service: ?student_id=&thesis_id=&status=
     filters = {
@@ -193,7 +201,7 @@ def registration_list(request):
         "statuses": [("PENDING", "Chờ duyệt"), ("APPROVED", "Đã duyệt"), ("REJECTED", "Từ chối")],
     })
 
-
+@role_required(SINH_VIEN, QUAN_TRI)
 def registration_create(request):
     students = fetch(request, api.students.list, default=[])
     theses = fetch(request, api.theses.list, default=[])
@@ -214,7 +222,7 @@ def registration_create(request):
         "menu": "registrations", "form": form,
     })
 
-
+@role_required(GIANG_VIEN, QUAN_TRI)
 @require_POST
 def registration_status(request, pk):
     new_status = request.POST.get("status")
@@ -229,7 +237,7 @@ def registration_status(request, pk):
         messages.error(request, translate_error(str(exc)))
     return redirect("registration_list")
 
-
+@role_required(QUAN_TRI)
 @require_POST
 def registration_delete(request, pk):
     try:
@@ -243,6 +251,7 @@ def registration_delete(request, pk):
 
 
 # ---------------------------------------------------------------- API Docs
+@role_required(QUAN_TRI)
 def api_docs(request):
     services = [
         ("Student Service", "Quản lý sinh viên", settings.STUDENT_SERVICE_URL, "student_db"),

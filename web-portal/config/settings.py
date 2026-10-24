@@ -22,6 +22,10 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "portal",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -30,6 +34,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",   
+    "django.contrib.auth.middleware.AuthenticationMiddleware", 
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -51,8 +57,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# Không dùng database
-DATABASES = {}
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "portal_auth.sqlite3",
+    }
+}
+
+LOGIN_URL = "accounts:login"
+LOGIN_REDIRECT_URL = "/" 
+LOGOUT_REDIRECT_URL = "accounts:login"
 
 # Thông báo (Lưu thành công, lỗi...) lưu trong cookie vì không có database
 MESSAGE_STORAGE = "django.contrib.messages.storage.cookie.CookieStorage"
