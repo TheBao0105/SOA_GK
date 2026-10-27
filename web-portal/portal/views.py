@@ -21,6 +21,7 @@ from .auth import (
     SESSION_REFRESH,
     current_role,
     current_user,
+    has_valid_session,
     login_session,
     role_required,
     save_tokens,
@@ -47,7 +48,7 @@ def login_view(request):
     if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
         next_url = ""  # chống chuyển hướng sang trang lạ (open redirect)
 
-    if request.method == "GET" and request.session.get(SESSION_ACCESS):
+    if request.method == "GET" and has_valid_session(request.session):
         return redirect(next_url or "dashboard")
 
     form = LoginForm(request.POST or None)

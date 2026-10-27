@@ -14,6 +14,7 @@ import functools
 from urllib.parse import urlencode
 
 from django.contrib import messages
+from django.http import HttpResponseForbidden
 from django.shortcuts import redirect
 from django.urls import reverse
 
@@ -54,8 +55,22 @@ def login_session(request, data):
     }
 
 
+def has_valid_session(session):
+    """Validate Portal session shape; API services still verify the actual JWT."""
+    access = session.get(SESSION_ACCESS)
+    user = session.get(SESSION_USER)
+    return (
+        isinstance(access, str) and bool(access.strip())
+        and isinstance(user, dict)
+        and type(user.get("id")) is int and user["id"] > 0
+        and isinstance(user.get("username"), str) and bool(user["username"].strip())
+        and user.get("role") in ("ADMIN", "LECTURER", "STUDENT")
+    )
+
+
 def current_user(request):
-    return request.session.get(SESSION_USER)
+    user = request.session.get(SESSION_USER)
+    return user if isinstance(user, dict) else None
 
 
 def current_role(request):
@@ -73,9 +88,11 @@ def role_required(*roles):
     def decorator(view):
         @functools.wraps(view)
         def wrapper(request, *args, **kwargs):
+            if not has_valid_session(request.session):
+                request.session.flush()
+                return redirect(login_url(request.get_full_path() if request.method == "GET" else None))
             if current_role(request) not in roles:
-                messages.error(request, "Bạn không có quyền truy cập chức năng này.")
-                return redirect("dashboard")
+                return permission_denied_response(request)
             return view(request, *args, **kwargs)
 
         return wrapper
@@ -86,6 +103,15 @@ def role_required(*roles):
 def login_url(next_path=None):
     url = reverse("login")
     return f"{url}?{urlencode({'next': next_path})}" if next_path else url
+
+
+def permission_denied_response(request):
+    message = "Bạn không có quyền truy cập chức năng này."
+    messages.error(request, message)
+    # Never redirect the dashboard back to itself when a role/backend denies it.
+    if request.path == reverse("dashboard"):
+        return HttpResponseForbidden(message, content_type="text/plain; charset=utf-8")
+    return redirect("dashboard")
 
 
 class LoginRequiredMiddleware:
@@ -101,8 +127,15 @@ class LoginRequiredMiddleware:
     def __call__(self, request):
         token = _current_session.set(request.session)
         try:
-            if not self.is_public(request.path) and not request.session.get(SESSION_ACCESS):
-                return redirect(login_url(request.get_full_path()))
+            valid = has_valid_session(request.session)
+            auth_keys = (SESSION_ACCESS, SESSION_REFRESH, SESSION_USER, "_auth_user_id")
+            if not valid and any(key in request.session for key in auth_keys):
+                # Recover cookies from the old login implementation or an incomplete session.
+                # Apply this on login URLs too, so their GET handler cannot bounce back to /.
+                request.session.flush()
+                messages.warning(request, "Phiên đăng nhập cũ không còn hợp lệ, vui lòng đăng nhập lại.")
+            if not self.is_public(request.path) and not valid:
+                return redirect(login_url(request.get_full_path() if request.method == "GET" else None))
             return self.get_response(request)
         finally:
             _current_session.reset(token)
@@ -117,6 +150,5 @@ class LoginRequiredMiddleware:
             return redirect(login_url(next_path))
         if isinstance(exception, Forbidden):
             # Backend từ chối (403): báo cho người dùng thay vì trang lỗi
-            messages.error(request, "Bạn không có quyền thực hiện thao tác này.")
-            return redirect("dashboard")
+            return permission_denied_response(request)
         return None
