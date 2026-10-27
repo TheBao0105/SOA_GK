@@ -4,11 +4,14 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="mb-0">Danh sách đăng ký đề tài</h1>
-    <a href="{% url 'registration_create' %}" class="btn btn-primary">Đăng ký đề tài</a>
+    <h1 class="mb-0">{% if current_user.is_student %}Đăng ký của tôi{% elif current_user.is_lecturer %}Đăng ký vào đề tài tôi hướng dẫn{% else %}Danh sách đăng ký đề tài{% endif %}</h1>
+    {% if current_user.is_admin or current_user.is_student %}<a href="{% url 'registration_create' %}" class="btn btn-primary">Đăng ký đề tài</a>{% endif %}
 </div>
 
+{% include "portal/_period_banner.html" %}
+
 <form method="get" class="row g-2 mb-3">
+    {% if not current_user.is_student %}
     <div class="col-md-3">
         <select name="student_id" class="form-select">
             <option value="">-- Tất cả sinh viên --</option>
@@ -17,6 +20,7 @@
             {% endfor %}
         </select>
     </div>
+    {% endif %}
     <div class="col-md-3">
         <select name="thesis_id" class="form-select">
             <option value="">-- Tất cả đề tài --</option>
@@ -47,7 +51,7 @@
             <th>Đề tài</th>
             <th>Ngày đăng ký</th>
             <th>Trạng thái</th>
-            <th style="width: 200px">Thao tác</th>
+            <th style="width: 320px">Thao tác</th>
         </tr>
     </thead>
     <tbody>
@@ -64,30 +68,12 @@
                 </td>
                 <td>{{ r.registered_at|date:"d/m/Y H:i" }}</td>
                 <td>
-                    {% if r.status == "APPROVED" %}<span class="badge text-bg-success">Đã duyệt</span>
-                    {% elif r.status == "REJECTED" %}<span class="badge text-bg-danger">Từ chối</span>
-                    {% else %}<span class="badge text-bg-warning">Chờ duyệt</span>{% endif %}
+                    {% include "portal/_registration_status.html" %}
+                    {% if r.status == "REJECTED" and r.reject_reason %}<div class="small text-muted">Lý do: {{ r.reject_reason }}</div>{% endif %}
                 </td>
                 <td>
-                    {% if r.status != "APPROVED" %}
-                        <form method="post" action="{% url 'registration_status' r.id %}" class="d-inline">
-                            {% csrf_token %}
-                            <input type="hidden" name="status" value="APPROVED">
-                            <button type="submit" class="btn btn-sm btn-outline-success">Duyệt</button>
-                        </form>
-                    {% endif %}
-                    {% if r.status != "REJECTED" %}
-                        <form method="post" action="{% url 'registration_status' r.id %}" class="d-inline">
-                            {% csrf_token %}
-                            <input type="hidden" name="status" value="REJECTED">
-                            <button type="submit" class="btn btn-sm btn-outline-secondary">Từ chối</button>
-                        </form>
-                    {% endif %}
-                    <form method="post" action="{% url 'registration_delete' r.id %}" class="d-inline"
-                          onsubmit="return confirm('Xóa đăng ký này?');">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-sm btn-outline-danger">Xóa</button>
-                    </form>
+                    <a href="{% url 'registration_detail' r.id %}" class="btn btn-sm btn-outline-primary">Chi tiết</a>
+                    {% include "portal/_registration_actions.html" %}
                 </td>
             </tr>
         {% empty %}

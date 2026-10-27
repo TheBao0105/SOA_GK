@@ -1,0 +1,10 @@
+{% extends 'portal/base.html' %}
+{% block title %}Chấm điểm{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3"><h1>{% if current_user.is_student %}Kết quả của tôi{% else %}Hồ sơ chấm điểm{% endif %}</h1>
+{% if current_user.is_admin %}<div><a class="btn btn-outline-primary" href="{% url 'grading_period_list' %}">Đợt chấm</a> <a class="btn btn-primary" href="{% url 'assessment_create' %}">Tạo hồ sơ</a></div>{% endif %}</div>
+<p class="text-muted">Thang điểm 10. Điểm tổng kết là trung bình điểm theo trọng số của các giảng viên được phân công. Sinh viên chỉ thấy kết quả đã công bố.</p>
+<div class="table-responsive"><table class="table table-bordered bg-white"><thead><tr><th>Hồ sơ</th><th>Đợt chấm</th><th>Sinh viên</th><th>Đề tài</th><th>Trạng thái</th><th>Điểm tổng kết</th><th></th></tr></thead><tbody>
+{% for a in assessments %}<tr><td>#{{ a.id }}</td><td>{{ a.period_name }}</td><td>{{ a.student_name }}</td><td>{{ a.thesis_title }}</td><td>{% include 'portal/_grading_status.html' with status=a.status %}</td><td>{{ a.final_score|default_if_none:'—' }}</td><td><a href="{% url 'assessment_detail' a.id %}">Chi tiết</a></td></tr>
+{% empty %}<tr><td colspan="7" class="text-center text-muted">Chưa có hồ sơ chấm điểm trong phạm vi của bạn.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Thêm tài khoản{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">Thêm tài khoản</h1>
+
+<div class="card" style="max-width: 600px">
+    <div class="card-body">
+        {% include "portal/_form_errors.html" %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+                {% include "portal/_field.html" %}
+                {% if field.help_text %}<div class="form-text mt-n2 mb-3">{{ field.help_text }}</div>{% endif %}
+            {% endfor %}
+            <a href="{% url 'account_list' %}" class="btn btn-secondary">Hủy</a>
+            <button type="submit" class="btn btn-primary">Tạo tài khoản</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Tài khoản{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Quản lý tài khoản</h1>
+    <a href="{% url 'account_create' %}" class="btn btn-primary">Thêm tài khoản</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-4">
+        <input type="text" name="search" value="{{ filters.search }}" class="form-control" placeholder="Tìm theo username, email, họ tên...">
+    </div>
+    <div class="col-md-3">
+        <select name="role" class="form-select">
+            <option value="">-- Tất cả vai trò --</option>
+            {% for value, label in roles %}
+                <option value="{{ value }}" {% if filters.role == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-primary">Lọc</button>
+        {% if filters %}<a href="{% url 'account_list' %}" class="btn btn-outline-secondary">Bỏ lọc</a>{% endif %}
+    </div>
+</form>
+
+<table class="table table-bordered table-hover bg-white">
+    <thead>
+        <tr>
+            <th style="width: 60px">STT</th>
+            <th>Tên đăng nhập</th>
+            <th>Họ tên</th>
+            <th>Email</th>
+            <th>Vai trò</th>
+            <th>Sinh viên</th>
+            <th>Trạng thái</th>
+            <th style="width: 220px">Thao tác</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for a in accounts %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ a.username }}</td>
+                <td>{{ a.full_name }}</td>
+                <td>{{ a.email }}</td>
+                <td>
+                    {% if a.role == "ADMIN" %}<span class="badge text-bg-dark">Quản trị</span>
+                    {% elif a.role == "LECTURER" %}<span class="badge text-bg-info">Giảng viên</span>
+                    {% else %}<span class="badge text-bg-light">Sinh viên</span>{% endif %}
+                </td>
+                <td>{% if a.student %}{{ a.student.student_code }} - {{ a.student.full_name }}{% elif a.student_id %}#{{ a.student_id }}{% endif %}</td>
+                <td>
+                    {% if not a.is_active %}<span class="badge text-bg-danger">Đã khóa</span>
+                    {% elif a.locked %}<span class="badge text-bg-warning">Tạm khóa (sai mật khẩu)</span>
+                    {% else %}<span class="badge text-bg-success">Hoạt động</span>{% endif %}
+                </td>
+                <td>
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'account_edit' a.id %}">Sửa</a>
+                    {% if a.id != current_user.id %}
+                    <form method="post" action="{% url 'account_toggle_active' a.id %}" class="d-inline">
+                        {% csrf_token %}
+                        {% if a.is_active %}
+                            <input type="hidden" name="is_active" value="false">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Khóa tài khoản</button>
+                        {% else %}
+                            <input type="hidden" name="is_active" value="true">
+                            <button type="submit" class="btn btn-sm btn-outline-success">Mở lại</button>
+                        {% endif %}
+                    </form>
+                    {% endif %}
+                    {% if a.locked %}
+                    <form method="post" action="{% url 'account_unlock' a.id %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-warning">Mở khóa đăng nhập</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="8" class="text-center text-muted">Không có tài khoản nào.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div class="text-muted small">Tài khoản lưu ở Identity Service (auth_db). Khóa tài khoản thu hồi token tại Identity; các service kiểm tra ngay khi bật JWT_CHECK_ACCOUNT_STATE.</div>
+{% endblock %}

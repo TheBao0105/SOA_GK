@@ -1,0 +1,34 @@
+{# Các nút thao tác của một đăng ký; next="detail" để quay lại trang chi tiết sau khi bấm #}
+{% if r.can_approve %}
+    <form method="post" action="{% url 'registration_status' r.id %}" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="APPROVED">
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <button type="submit" class="btn btn-sm btn-outline-success">Duyệt</button>
+    </form>
+{% endif %}
+{% if r.can_reject %}
+    <form method="post" action="{% url 'registration_status' r.id %}" class="d-inline-flex gap-1 align-items-center">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="REJECTED">
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <input type="text" name="reject_reason" class="form-control form-control-sm" style="width: 140px"
+               placeholder="Lý do từ chối" maxlength="255" required>
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Từ chối</button>
+    </form>
+{% endif %}
+{% if r.can_cancel %}
+    <form method="post" action="{% url 'registration_cancel' r.id %}" class="d-inline"
+          onsubmit="return confirm('Hủy đăng ký đề tài này?');">
+        {% csrf_token %}
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <button type="submit" class="btn btn-sm btn-outline-warning">Hủy đăng ký</button>
+    </form>
+{% endif %}
+{% if r.can_delete %}
+    <form method="post" action="{% url 'registration_delete' r.id %}" class="d-inline"
+          onsubmit="return confirm('Xóa hẳn bản ghi đăng ký này? (thường chỉ cần Hủy)');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-danger">Xóa</button>
+    </form>
+{% endif %}

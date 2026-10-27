@@ -5,8 +5,12 @@
 {% block content %}
 <h1 class="mb-3">API Docs</h1>
 
-<p>Hệ thống gồm 3 service độc lập, mỗi service có database riêng và giao tiếp với nhau qua HTTP/REST.
-   Trang web này cũng chỉ gọi REST API của 3 service, không kết nối trực tiếp tới database nào.</p>
+<p>Hệ thống gồm 4 service độc lập, mỗi service có database riêng và giao tiếp với nhau qua HTTP/REST.
+   Trang web này cũng chỉ gọi REST API của các service, không kết nối trực tiếp tới database nào.
+   Identity Service cấp JWT; các service khác tự xác minh chữ ký bằng khóa công khai.
+   Khi bật JWT_CHECK_ACCOUNT_STATE, service gọi thêm Identity để kiểm tra trạng thái tài khoản.</p>
+<p class="text-muted">Trạng thái bên dưới chỉ kiểm tra HTTP 200 của /api/schema/.
+   Đây chưa phải xác nhận database hoạt động. Khi service đang chạy mà SQL Server lỗi, trang này vẫn có thể báo API phản hồi.</p>
 
 <table class="table table-bordered bg-white">
     <thead>
@@ -15,7 +19,7 @@
             <th>Chức năng</th>
             <th>Địa chỉ</th>
             <th>Database</th>
-            <th>Trạng thái</th>
+            <th>Phản hồi API Docs</th>
             <th>Swagger</th>
         </tr>
     </thead>
@@ -27,8 +31,8 @@
                 <td><code>{{ s.url }}</code></td>
                 <td><code>{{ s.db }}</code></td>
                 <td>
-                    {% if s.online %}<span class="badge text-bg-success">Hoạt động</span>
-                    {% else %}<span class="badge text-bg-danger">Không hoạt động</span>{% endif %}
+                    {% if s.online %}<span class="badge text-bg-success">API phản hồi</span>
+                    {% else %}<span class="badge text-bg-danger">API lỗi / không phản hồi</span>{% endif %}
                 </td>
                 <td><a href="{{ s.url }}/api/docs/" target="_blank">{{ s.url }}/api/docs/</a></td>
             </tr>

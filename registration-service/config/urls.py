@@ -9,6 +9,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     # REST API của service
     path("api/", include("registrations.urls")),
+    path("api/grading/", include("grading.urls")),
     # Swagger: /api/schema/ trả về OpenAPI, /api/docs/ là giao diện Swagger UI
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

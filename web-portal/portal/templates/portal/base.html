@@ -18,23 +18,47 @@
 <nav class="navbar navbar-dark bg-primary">
     <div class="container-fluid">
         <a class="navbar-brand fw-semibold" href="{% url 'dashboard' %}">QUẢN LÝ ĐỒ ÁN TỐT NGHIỆP</a>
-        <span class="navbar-text text-white small">Khoa Công nghệ thông tin</span>
+        {% if current_user %}
+            <div class="d-flex align-items-center gap-2">
+                <span class="navbar-text text-white small">
+                    {{ current_user.full_name }}
+                    <span class="badge text-bg-light ms-1">{{ current_user.role_label }}</span>
+                </span>
+                <a href="{% url 'profile' %}" class="btn btn-sm btn-outline-light">Hồ sơ</a>
+                <a href="{% url 'change_password' %}" class="btn btn-sm btn-outline-light">Đổi mật khẩu</a>
+                <form method="post" action="{% url 'logout' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-light">Đăng xuất</button>
+                </form>
+            </div>
+        {% else %}
+            <span class="navbar-text text-white small">Khoa Công nghệ thông tin</span>
+        {% endif %}
     </div>
 </nav>
 
 <div class="container-fluid">
     <div class="row">
+        {% if current_user %}
         <div class="col-md-2 sidebar p-0 pt-2">
             <div class="list-group list-group-flush">
                 <a href="{% url 'dashboard' %}" class="list-group-item list-group-item-action {% if menu == 'dashboard' %}active{% endif %}">Dashboard</a>
-                <a href="{% url 'student_list' %}" class="list-group-item list-group-item-action {% if menu == 'students' %}active{% endif %}">Sinh viên</a>
-                <a href="{% url 'thesis_list' %}" class="list-group-item list-group-item-action {% if menu == 'theses' %}active{% endif %}">Đề tài</a>
-                <a href="{% url 'registration_list' %}" class="list-group-item list-group-item-action {% if menu == 'registrations' %}active{% endif %}">Đăng ký</a>
+                {# Menu theo vai trò - chỉ để dễ dùng; quyền thật do backend kiểm tra #}
+                <a href="{% url 'student_list' %}" class="list-group-item list-group-item-action {% if menu == 'students' %}active{% endif %}">{% if current_user.is_student %}Hồ sơ của tôi{% else %}Sinh viên{% endif %}</a>
+                <a href="{% url 'thesis_list' %}" class="list-group-item list-group-item-action {% if menu == 'theses' %}active{% endif %}">{% if current_user.is_student %}Đề tài đang mở{% else %}Đề tài{% endif %}</a>
+                <a href="{% url 'registration_list' %}" class="list-group-item list-group-item-action {% if menu == 'registrations' %}active{% endif %}">{% if current_user.is_student %}Đăng ký của tôi{% elif current_user.is_lecturer %}Duyệt đăng ký{% else %}Đăng ký{% endif %}</a>
+                {% if current_user.is_admin %}
+                <a href="{% url 'period_list' %}" class="list-group-item list-group-item-action {% if menu == 'periods' %}active{% endif %}">Đợt đăng ký</a>
+                <a href="{% url 'account_list' %}" class="list-group-item list-group-item-action {% if menu == 'accounts' %}active{% endif %}">Tài khoản</a>
+                {% endif %}
+                <a href="{% url 'assessment_list' %}" class="list-group-item list-group-item-action {% if menu == 'grading' %}active{% endif %}">{% if current_user.is_student %}Điểm của tôi{% else %}Chấm điểm{% endif %}</a>
+                {% if current_user.is_admin %}<a href="{% url 'audit_log_list' %}" class="list-group-item list-group-item-action {% if menu == 'audit' %}active{% endif %}">Nhật ký</a>{% endif %}
                 <a href="{% url 'api_docs' %}" class="list-group-item list-group-item-action {% if menu == 'api_docs' %}active{% endif %}">API Docs</a>
             </div>
         </div>
+        {% endif %}
 
-        <main class="col-md-10 p-4">
+        <main class="{% if current_user %}col-md-10{% else %}col-12{% endif %} p-4">
             {% for message in messages %}
                 <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible" role="alert">
                     {{ message }}

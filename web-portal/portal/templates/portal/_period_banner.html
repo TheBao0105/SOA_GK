@@ -1,0 +1,12 @@
+{% if period %}
+    <div class="alert alert-info py-2">
+        Đợt đăng ký đang mở: <strong>{{ period.name }}</strong>
+        ({{ period.start_at|date:"d/m/Y H:i" }} - {{ period.end_at|date:"d/m/Y H:i" }}).
+        Mỗi sinh viên được giữ tối đa {{ period.max_active_per_student }} đăng ký còn hiệu lực.
+    </div>
+{% else %}
+    <div class="alert alert-warning py-2">
+        Hiện chưa có đợt đăng ký nào đang mở: sinh viên chưa thể đăng ký hoặc tự hủy đăng ký.
+        {% if current_user.is_admin %}<a href="{% url 'period_list' %}" class="alert-link">Quản lý đợt đăng ký</a>{% endif %}
+    </div>
+{% endif %}

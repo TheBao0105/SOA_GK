@@ -1,0 +1,4 @@
+{% if r.status == "APPROVED" %}<span class="badge text-bg-success">Đã duyệt</span>
+{% elif r.status == "REJECTED" %}<span class="badge text-bg-danger">Từ chối</span>
+{% elif r.status == "CANCELLED" %}<span class="badge text-bg-secondary">Đã hủy</span>
+{% else %}<span class="badge text-bg-warning">Chờ duyệt</span>{% endif %}

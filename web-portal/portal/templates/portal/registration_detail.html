@@ -1,0 +1,87 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Chi tiết đăng ký{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Chi tiết đăng ký #{{ r.id }}</h1>
+    <a href="{% url 'registration_list' %}" class="btn btn-outline-secondary">Quay lại</a>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card mb-3">
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Sinh viên</dt>
+                    <dd class="col-sm-8">{% if r.student %}{{ r.student.student_code }} - {{ r.student.full_name }}{% else %}Sinh viên #{{ r.student_id }}{% endif %}</dd>
+                    <dt class="col-sm-4">Đề tài</dt>
+                    <dd class="col-sm-8">{% if r.thesis %}{{ r.thesis.thesis_code }} - {{ r.thesis.title }}{% else %}Đề tài #{{ r.thesis_id }}{% endif %}</dd>
+                    {% if r.thesis.supervisor %}
+                    <dt class="col-sm-4">GVHD</dt>
+                    <dd class="col-sm-8">{{ r.thesis.supervisor }}</dd>
+                    {% endif %}
+                    <dt class="col-sm-4">Ngày đăng ký</dt>
+                    <dd class="col-sm-8">{{ r.registered_at|date:"d/m/Y H:i" }}</dd>
+                    <dt class="col-sm-4">Trạng thái</dt>
+                    <dd class="col-sm-8">{% include "portal/_registration_status.html" %}</dd>
+                    {% if r.processed_at %}
+                    <dt class="col-sm-4">Xử lý lúc</dt>
+                    <dd class="col-sm-8">{{ r.processed_at|date:"d/m/Y H:i" }}</dd>
+                    {% endif %}
+                    {% if r.status == "REJECTED" and r.reject_reason %}
+                    <dt class="col-sm-4">Lý do từ chối</dt>
+                    <dd class="col-sm-8">{{ r.reject_reason }}</dd>
+                    {% endif %}
+                    {% if r.cancelled_at %}
+                    <dt class="col-sm-4">Hủy lúc</dt>
+                    <dd class="col-sm-8">{{ r.cancelled_at|date:"d/m/Y H:i" }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+        <div>{% include "portal/_registration_actions.html" with next="detail" %}</div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header bg-white fw-semibold">
+                Nhận xét / tiến độ
+                {% if latest_progress is not None %}
+                    <span class="float-end small text-muted">Hoàn thành gần nhất: {{ latest_progress }}%</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if latest_progress is not None %}
+                <div class="progress mb-3" role="progressbar" aria-valuenow="{{ latest_progress }}" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar" style="width: {{ latest_progress }}%">{{ latest_progress }}%</div>
+                </div>
+                {% endif %}
+
+                {% if form %}
+                <form method="post" class="mb-3" novalidate>
+                    {% csrf_token %}
+                    {% include "portal/_form_errors.html" %}
+                    {% for field in form %}{% include "portal/_field.html" %}{% endfor %}
+                    <button type="submit" class="btn btn-primary btn-sm">Ghi nhận xét</button>
+                </form>
+                {% elif r.status != "APPROVED" %}
+                <p class="text-muted small">Chỉ ghi nhận xét / tiến độ khi đăng ký đã được duyệt.</p>
+                {% endif %}
+
+                {% for n in notes %}
+                    <div class="border-top pt-2 mt-2">
+                        <div class="small text-muted">
+                            {{ n.created_at|date:"d/m/Y H:i" }} - {{ n.author_name|default:"Người dùng" }}
+                            {% if n.progress is not None %}<span class="badge text-bg-light">{{ n.progress }}%</span>{% endif %}
+                        </div>
+                        <div>{{ n.content|linebreaksbr }}</div>
+                    </div>
+                {% empty %}
+                    <p class="text-muted mb-0">Chưa có nhận xét nào.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -4,8 +4,8 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="mb-0">Danh sách đề tài</h1>
-    <a href="{% url 'thesis_create' %}" class="btn btn-primary">Thêm đề tài</a>
+    <h1 class="mb-0">{% if current_user.is_student %}Đề tài đang mở đăng ký{% else %}Danh sách đề tài{% endif %}</h1>
+    {% if current_user.is_admin or current_user.is_lecturer %}<a href="{% url 'thesis_create' %}" class="btn btn-primary">Thêm đề tài</a>{% endif %}
 </div>
 
 <form method="get" class="row g-2 mb-3">
@@ -25,7 +25,7 @@
             <th>Mã đề tài</th>
             <th>Tên đề tài</th>
             <th>GVHD</th>
-            <th>Đã đăng ký</th>
+            <th>{% if current_user.is_student %}Số SV tối đa{% else %}Đã đăng ký{% endif %}</th>
             <th>Trạng thái</th>
             <th style="width: 130px">Thao tác</th>
         </tr>
@@ -41,16 +41,24 @@
                 </td>
                 <td>{{ t.supervisor }}</td>
                 <td>
-                    <a href="{% url 'registration_list' %}?thesis_id={{ t.id }}">{{ t.registered }}/{{ t.max_students }}</a>
+                    {% if current_user.is_admin or t.supervisor_id == current_user.id and current_user.is_lecturer %}
+                        <a href="{% url 'registration_list' %}?thesis_id={{ t.id }}">{{ t.registered }}/{{ t.max_students }}</a>
+                    {% else %}
+                        {{ t.max_students }}
+                    {% endif %}
                 </td>
                 <td>{% include "portal/_thesis_status.html" with status=t.status %}</td>
                 <td>
+                    {% if current_user.is_admin or t.supervisor_id == current_user.id and current_user.is_lecturer %}
                     <a href="{% url 'thesis_edit' t.id %}" class="btn btn-sm btn-outline-primary">Sửa</a>
                     <form method="post" action="{% url 'thesis_delete' t.id %}" class="d-inline"
                           onsubmit="return confirm('Xóa đề tài {{ t.thesis_code|escapejs }}?');">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-sm btn-outline-danger">Xóa</button>
                     </form>
+                    {% elif current_user.is_student and t.status == "OPEN" %}
+                    <a href="{% url 'registration_create' %}?thesis_id={{ t.id }}" class="btn btn-sm btn-primary">Đăng ký</a>
+                    {% endif %}
                 </td>
             </tr>
         {% empty %}

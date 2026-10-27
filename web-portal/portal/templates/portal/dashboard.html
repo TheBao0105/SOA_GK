@@ -3,6 +3,8 @@
 {% block content %}
 <h1 class="mb-3">Dashboard</h1>
 
+{% if show_period %}{% include "portal/_period_banner.html" %}{% endif %}
+
 <div class="row g-3 mb-4">
     <div class="col-md-3">
         <div class="card">

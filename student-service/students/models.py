@@ -18,3 +18,12 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.student_code} - {self.full_name}"
+
+
+class StudentCodeSequence(models.Model):
+    """Singleton counter; lock this row while allocating and saving a code."""
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    value = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        db_table = "bo_dem_ma_sinhvien"

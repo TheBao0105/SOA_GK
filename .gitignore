@@ -2,3 +2,11 @@
 __pycache__/
 *.pyc
 .env
+# Khóa ký JWT - KHÔNG commit khóa bí mật
+keys/
+*.pem
+# Bản sao lưu tạo khi nâng cấp
+.backup_*/
+
+# Local verification scratch data
+work/
