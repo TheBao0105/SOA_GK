@@ -11,12 +11,14 @@ Portal không có database: sau khi đăng nhập tại Identity Service, cặp 
 """
 import contextvars
 import functools
+import logging
 from urllib.parse import urlencode
 
 from django.contrib import messages
-from django.http import HttpResponseForbidden
 from django.shortcuts import redirect
 from django.urls import reverse
+
+logger = logging.getLogger(__name__)
 
 _current_session = contextvars.ContextVar("portal_session", default=None)
 
@@ -105,12 +107,16 @@ def login_url(next_path=None):
     return f"{url}?{urlencode({'next': next_path})}" if next_path else url
 
 
-def permission_denied_response(request):
-    message = "Bạn không có quyền truy cập chức năng này."
-    messages.error(request, message)
-    # Never redirect the dashboard back to itself when a role/backend denies it.
+def permission_denied_response(request, service_name=None):
+    # All three supported roles can enter the dashboard. A denial here means the
+    # saved session cannot be used; recover at the public login instead of looping
+    # to / or leaving a browser stranded on a plain-text 403 page.
     if request.path == reverse("dashboard"):
-        return HttpResponseForbidden(message, content_type="text/plain; charset=utf-8")
+        logger.warning("Dashboard access denied by %s; clearing Portal session", service_name or "Portal role check")
+        request.session.flush()
+        messages.warning(request, "Phiên đăng nhập không được chấp nhận. Vui lòng đăng nhập lại.")
+        return redirect(login_url())
+    messages.error(request, "Bạn không có quyền truy cập chức năng này.")
     return redirect("dashboard")
 
 
@@ -149,6 +155,5 @@ class LoginRequiredMiddleware:
             next_path = request.get_full_path() if request.method == "GET" else None
             return redirect(login_url(next_path))
         if isinstance(exception, Forbidden):
-            # Backend từ chối (403): báo cho người dùng thay vì trang lỗi
-            return permission_denied_response(request)
+            return permission_denied_response(request, service_name=exception.service_name)
         return None

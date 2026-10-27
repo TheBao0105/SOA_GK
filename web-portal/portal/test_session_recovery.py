@@ -46,10 +46,33 @@ class SessionRecoveryTests(SimpleTestCase):
             self.assertEqual(self.client.get('/').status_code,200)
             self.assertEqual(self.client.session['user']['role'],'ADMIN')
 
-    def test_backend_forbidden_on_dashboard_is_terminal_not_redirect_to_itself(self):
+    def test_backend_forbidden_on_dashboard_clears_session_and_shows_login(self):
         with patch('portal.api_client.requests.request',side_effect=fixtures.fake_request):
             self.client.post('/dang-nhap/',{'username':'admin','password':'x'})
-        with patch('portal.api_client.requests.request',return_value=fixtures.make_response(403,{'detail':'Denied'})):
+        with patch('portal.api_client.requests.request',return_value=fixtures.make_response(403,{'detail':'Denied'})) as remote, self.assertLogs('portal.auth',level='WARNING') as logs:
             response=self.client.get('/',follow=True)
-        self.assertEqual(response.status_code,403)
-        self.assertEqual(response.redirect_chain,[])
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.request['PATH_INFO'],'/dang-nhap/')
+        self.assertTemplateUsed(response,'portal/login.html')
+        self.assertIsNone(self.client.session.get('access_token'))
+        self.assertEqual(response.redirect_chain,[('/dang-nhap/',302)])
+        self.assertEqual(remote.call_count,1)
+        self.assertTrue(any('Student Service' in line for line in logs.output))
+
+    def test_first_visit_always_shows_login_without_backend_calls(self):
+        self.client.cookies.clear()
+        with patch('portal.api_client.requests.request') as remote:
+            response=self.client.get('/',follow=True)
+        self.assertEqual(response.status_code,200)
+        self.assertTemplateUsed(response,'portal/login.html')
+        remote.assert_not_called()
+
+    def test_reopening_after_session_recovery_stays_on_login(self):
+        self.set_session(access_token='old',user={'id':1,'username':'admin','role':'QUAN_TRI'})
+        with patch('portal.api_client.requests.request') as remote:
+            first=self.client.get('/',follow=True)
+            second=self.client.get('/',follow=True)
+        self.assertEqual(first.status_code,200)
+        self.assertEqual(second.status_code,200)
+        self.assertTemplateUsed(second,'portal/login.html')
+        remote.assert_not_called()

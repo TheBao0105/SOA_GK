@@ -26,6 +26,10 @@ class NotFound(Exception):
 class Forbidden(Exception):
     """API trả về 403: đã đăng nhập nhưng không có quyền."""
 
+    def __init__(self, message="Bạn không có quyền thực hiện thao tác này.", service_name=None):
+        self.service_name = service_name
+        super().__init__(message)
+
 
 class ApiError(Exception):
     """API trả về 4xx - dữ liệu không hợp lệ. data là JSON lỗi của API."""
@@ -99,7 +103,7 @@ def call(service_name, method, url, *, auth=True, retry=True, **kwargs):
     if response.status_code == 404:
         raise NotFound()
     if auth and response.status_code == 403:
-        raise Forbidden(_json_dict(response).get("detail", "Bạn không có quyền thực hiện thao tác này."))
+        raise Forbidden(_json_dict(response).get("detail", "Bạn không có quyền thực hiện thao tác này."), service_name=service_name)
     if response.status_code == 503:
         # Registration Service báo một service khác đang tắt
         raise ServiceUnavailable(_json_dict(response).get("error", f"{service_name} không hoạt động"))
