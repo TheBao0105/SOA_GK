@@ -24,7 +24,7 @@ SESSION_REFRESH = "refresh_token"
 SESSION_USER = "user"
 
 # Các trang không cần đăng nhập
-PUBLIC_URL_NAMES = ("login",)
+PUBLIC_URL_NAMES = ("login", "accounts:login")
 
 
 class AuthExpired(Exception):

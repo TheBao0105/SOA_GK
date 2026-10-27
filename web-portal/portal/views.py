@@ -12,6 +12,8 @@ from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from accounts.roles import QUAN_TRI, GIANG_VIEN, SINH_VIEN
+
 from . import api_client as api
 from .api_client import ApiError, NotFound, ServiceUnavailable
 from .auth import (
@@ -94,7 +96,7 @@ def change_password_view(request):
 
 # request chứa thông tin yêu cầu HTTP từ trình duyệt của người dùng
 # Chỉ ADMIN (đăng ký hộ) và STUDENT (tự đăng ký) dùng được trang này
-@role_required("ADMIN", "STUDENT")
+@role_required(QUAN_TRI, SINH_VIEN)
 def registration_create(request):
 
     # Sinh viên chỉ được đăng ký cho chính mình: student_id lấy từ tài khoản đăng nhập
@@ -219,6 +221,7 @@ def count_active_registrations(registrations):
 
 
 # ---------------------------------------------------------------- Dashboard
+@role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def dashboard(request):
     students = fetch(request, api.students.list)
     theses = fetch(request, api.theses.list)
@@ -245,6 +248,7 @@ def dashboard(request):
 
 
 # ---------------------------------------------------------------- Sinh viên
+@role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def student_list(request):
     q = request.GET.get("q", "").strip()
     students = fetch(request, api.students.list, {"search": q} if q else None, default=[])
@@ -253,7 +257,7 @@ def student_list(request):
     })
 
 
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def student_form(request, pk=None):
     initial = None
     if pk:
@@ -283,7 +287,7 @@ def student_form(request, pk=None):
 
 
 @require_POST
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def student_delete(request, pk):
     try:
         api.students.delete(pk)
@@ -299,6 +303,7 @@ def student_delete(request, pk):
 
 
 # ---------------------------------------------------------------- Đề tài
+@role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def thesis_list(request):
     q = request.GET.get("q", "").strip()
     theses = fetch(request, api.theses.list, {"search": q} if q else None, default=[])
@@ -311,7 +316,7 @@ def thesis_list(request):
     })
 
 
-@role_required("ADMIN", "LECTURER")
+@role_required(QUAN_TRI, GIANG_VIEN)
 def thesis_form(request, pk=None):
     role = current_role(request)
     # Chỉ ADMIN chọn giảng viên hướng dẫn (danh sách lấy từ Identity Service);
@@ -356,7 +361,7 @@ def thesis_form(request, pk=None):
 
 
 @require_POST
-@role_required("ADMIN", "LECTURER")
+@role_required(QUAN_TRI, GIANG_VIEN)
 def thesis_delete(request, pk):
     try:
         api.theses.delete(pk)
@@ -412,6 +417,7 @@ def allowed_actions(registration, role, period):
     }
 
 
+@role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def registration_list(request):
     # Bộ lọc gửi thẳng sang Registration Service: ?student_id=&thesis_id=&status=
     filters = {
@@ -495,7 +501,7 @@ def back_to(request, pk):
 
 
 @require_POST
-@role_required("ADMIN", "LECTURER")
+@role_required(QUAN_TRI, GIANG_VIEN)
 def registration_status(request, pk):
     new_status = request.POST.get("status")
     data = {"status": new_status}
@@ -517,7 +523,7 @@ def registration_status(request, pk):
 
 
 @require_POST
-@role_required("ADMIN", "STUDENT")
+@role_required(QUAN_TRI, SINH_VIEN)
 def registration_cancel(request, pk):
     """Hủy đăng ký: bản ghi vẫn còn (trạng thái CANCELLED) để giữ lịch sử."""
     try:
@@ -533,7 +539,7 @@ def registration_cancel(request, pk):
 
 
 @require_POST
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def registration_delete(request, pk):
     """Xóa hẳn bản ghi (chỉ ADMIN, dùng khi nhập nhầm). Thao tác thường ngày là Hủy."""
     try:
@@ -549,7 +555,7 @@ def registration_delete(request, pk):
 
 
 # ---------------------------------------------------------------- Đợt đăng ký (chỉ ADMIN)
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def period_list(request):
     periods = fetch(request, api.periods.list, default=[])
     for p in periods:
@@ -558,7 +564,7 @@ def period_list(request):
     return render(request, "portal/period_list.html", {"menu": "periods", "periods": periods})
 
 
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def period_form(request, pk=None):
     initial = None
     if pk:
@@ -588,7 +594,7 @@ def period_form(request, pk=None):
 
 
 @require_POST
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def period_toggle(request, pk):
     activate = request.POST.get("is_active") == "true"
     try:
@@ -604,7 +610,7 @@ def period_toggle(request, pk):
 
 
 @require_POST
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def period_delete(request, pk):
     try:
         api.periods.delete(pk)
@@ -619,6 +625,7 @@ def period_delete(request, pk):
 
 
 # ---------------------------------------------------------------- API Docs
+@role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def api_docs(request):
     services = [
         ("Student Service", "Quản lý sinh viên", settings.STUDENT_SERVICE_URL, "student_db"),
@@ -634,7 +641,7 @@ def api_docs(request):
 
 
 # ---------------------------------------------------------------- Tài khoản (chỉ ADMIN)
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def account_list(request):
     params = {k: request.GET[k] for k in ("role", "search") if request.GET.get(k)}
     accounts = fetch(request, api.users.list, params or None, default=[])
@@ -649,7 +656,7 @@ def account_list(request):
     })
 
 
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def account_create(request):
     students = fetch(request, api.students.list, default=[])
     form = AccountForm(request.POST or None, students=students)
@@ -666,7 +673,7 @@ def account_create(request):
 
 
 @require_POST
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def account_toggle_active(request, pk):
     activate = request.POST.get("is_active") == "true"
     try:
@@ -683,7 +690,7 @@ def account_toggle_active(request, pk):
 
 
 @require_POST
-@role_required("ADMIN")
+@role_required(QUAN_TRI)
 def account_unlock(request, pk):
     try:
         api.unlock_user(pk)

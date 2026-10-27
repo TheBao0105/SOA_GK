@@ -1,7 +1,7 @@
 from django.urls import include, path
 
 urlpatterns = [
-    # Khi người dùng truy cập đường dẫn gốc "/",
-    # Django chuyển việc xử lý URL sang file portal.urls
+    # Compatibility URLs use the same Identity/JWT login as the main Portal.
+    path("accounts/", include("accounts.urls")),
     path("", include("portal.urls")),
 ]

@@ -10,3 +10,6 @@ keys/
 
 # Local verification scratch data
 work/
+
+# Legacy Portal authentication database stays local; Identity owns authentication.
+web-portal/portal_auth.sqlite3
