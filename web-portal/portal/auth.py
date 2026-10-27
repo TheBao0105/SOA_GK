@@ -15,7 +15,7 @@ import logging
 from urllib.parse import urlencode
 
 from django.contrib import messages
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 
 logger = logging.getLogger(__name__)
@@ -108,15 +108,13 @@ def login_url(next_path=None):
 
 
 def permission_denied_response(request, service_name=None):
-    # All three supported roles can enter the dashboard. A denial here means the
-    # saved session cannot be used; recover at the public login instead of looping
-    # to / or leaving a browser stranded on a plain-text 403 page.
+    # A permission denial does not invalidate an authenticated session.
+    logger.warning("Access denied by %s at %s; Portal session preserved",
+                   service_name or "Portal role check", request.path)
+    message = f"{service_name}: Bạn không có quyền truy cập chức năng này." if service_name else "Bạn không có quyền truy cập chức năng này."
     if request.path == reverse("dashboard"):
-        logger.warning("Dashboard access denied by %s; clearing Portal session", service_name or "Portal role check")
-        request.session.flush()
-        messages.warning(request, "Phiên đăng nhập không được chấp nhận. Vui lòng đăng nhập lại.")
-        return redirect(login_url())
-    messages.error(request, "Bạn không có quyền truy cập chức năng này.")
+        return render(request, "portal/forbidden.html", {"denial_message": message}, status=403)
+    messages.error(request, message)
     return redirect("dashboard")
 
 

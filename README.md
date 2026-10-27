@@ -624,3 +624,37 @@ Các lỗi hợp đồng JSON liên service được xử lý có kiểm soát, 
 Giao diện thêm mới không yêu cầu nhập mã: Student Service tự cấp SV001/SV002… và Thesis Service tự cấp DT001/DT002… Mã cũ được giữ nguyên, trang sửa hiển thị mã chỉ đọc. API vẫn nhận mã cung cấp rõ ràng để tương thích các công cụ seed; bỏ trường mã khi POST để dùng tự động.
 
 Cần chạy `python scripts/migrate_all.py` bằng môi trường `.venv` và khởi động lại service sau cập nhật. Xem [AUTO_CODES.md](AUTO_CODES.md) để biết migration, quy tắc cấp mã và kiểm thử.
+
+
+## Chạy trên máy khác và kiểm tra đăng nhập
+
+Pull đúng nhánh `test`, cài dependencies trong `.venv` của máy nhận; không sao chép `.venv`, `.env` hoặc khóa bí mật từ máy khác. Làm các bước SQL Server, migration và tạo tài khoản trong mục 5–8. Chỉ tạo file `.env` từ `.env.example` khi chưa có; sửa `DB_HOST` theo instance thực tế. Dùng đường dẫn tương đối cho khóa JWT, tránh đường dẫn `C:/Users/...` của máy người gửi.
+
+Mỗi bộ dịch vụ trên một máy dùng một cặp khóa do Identity tạo. Student/Thesis/Registration phải đọc đúng khóa công khai của Identity và cùng `JWT_ISSUER`. Không tạo lại khóa để thử chữa lỗi nếu chưa xác định nguyên nhân. Nếu đã chủ động đổi khóa thì khởi động lại cả năm dịch vụ và đăng nhập lại.
+
+Sau cập nhật, dừng cả năm process cũ rồi chạy lại từ cùng thư mục dự án:
+
+```powershell
+.\.venv\Scripts\python.exe -B scripts\migrate_all.py
+.\run_demo.bat online
+```
+
+Mở `http://127.0.0.1:8000/`. Đăng nhập dùng tài khoản trong Identity của **máy nhận**, vì `git pull` không sao chép dữ liệu SQL Server. Nếu gặp lỗi, giữ năm dịch vụ đang chạy và mở terminal khác:
+
+```powershell
+.\.venv\Scripts\python.exe -B scripts\check_login.py
+```
+
+Lệnh hỏi username và mật khẩu ẩn, kiểm tra cấu hình từng service, fingerprint khóa công khai/issuer và gửi token vừa đăng nhập tới từng API. Không ghi token/mật khẩu ra màn hình hay file. HTTP 401: kiểm tra khóa, issuer, thời gian hệ thống hoặc trạng thái tài khoản; HTTP 403: kiểm tra quyền tài khoản và phiên bản code của chính service được nêu; HTTP 503: kiểm tra log, database và kết nối Identity. Công cụ đọc cấu hình trên đĩa, vì vậy cần khởi động lại process sau khi sửa `.env`.
+
+Portal chỉ xóa phiên khi xác thực hết hiệu lực (401 không thể refresh) hoặc cookie không hợp lệ. HTTP 403 không xóa phiên: Dashboard giữ các phần được phép xem, đánh dấu phần không tải được và nêu tên service từ chối. Không tự nâng quyền hay bỏ kiểm tra JWT.
+
+Kiểm thử độc lập với SQL Server và dữ liệu đang dùng:
+
+```powershell
+.\.venv\Scripts\python.exe -B scripts\test_all.py --sqlite
+.\.venv\Scripts\python.exe -B scripts\integration_smoke.py --auth-mode online
+.\.venv\Scripts\python.exe -B scripts\integration_smoke.py --auth-mode offline
+```
+
+Integration tạo database SQLite và khóa tạm, chạy năm process HTTP để xác minh cài mới, đăng nhập cả ba vai trò và phân quyền. Nó không thay thế kiểm thử khóa đồng thời trên SQL Server thật.

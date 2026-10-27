@@ -46,18 +46,54 @@ class SessionRecoveryTests(SimpleTestCase):
             self.assertEqual(self.client.get('/').status_code,200)
             self.assertEqual(self.client.session['user']['role'],'ADMIN')
 
-    def test_backend_forbidden_on_dashboard_clears_session_and_shows_login(self):
+    def test_backend_forbidden_keeps_session_and_dashboard_available(self):
         with patch('portal.api_client.requests.request',side_effect=fixtures.fake_request):
             self.client.post('/dang-nhap/',{'username':'admin','password':'x'})
-        with patch('portal.api_client.requests.request',return_value=fixtures.make_response(403,{'detail':'Denied'})) as remote, self.assertLogs('portal.auth',level='WARNING') as logs:
-            response=self.client.get('/',follow=True)
-        self.assertEqual(response.status_code,200)
-        self.assertEqual(response.request['PATH_INFO'],'/dang-nhap/')
-        self.assertTemplateUsed(response,'portal/login.html')
-        self.assertIsNone(self.client.session.get('access_token'))
-        self.assertEqual(response.redirect_chain,[('/dang-nhap/',302)])
-        self.assertEqual(remote.call_count,1)
+        with patch('portal.api_client.requests.request',return_value=fixtures.make_response(403,{'detail':'Denied'})), self.assertLogs('portal.views',level='WARNING') as logs:
+            for _ in range(2):
+                response=self.client.get('/',follow=True)
+                self.assertEqual(response.status_code,200)
+                self.assertTemplateUsed(response,'portal/dashboard.html')
+                self.assertEqual(response.redirect_chain,[])
+                self.assertIsNotNone(self.client.session.get('access_token'))
+                self.assertIsNone(response.context['total_students'])
+                self.assertIsNone(response.context['total_theses'])
+                self.assertIsNone(response.context['total_registrations'])
+                self.assertContains(response,'Student Service')
+                self.assertNotContains(response,'Phiên đăng nhập không được chấp nhận')
         self.assertTrue(any('Student Service' in line for line in logs.output))
+
+    def test_individual_dashboard_denials_do_not_hide_other_sections(self):
+        for service, counter in (('8001','total_students'),('8002','total_theses'),('8003','total_registrations')):
+            with self.subTest(service=service):
+                with patch('portal.api_client.requests.request',side_effect=fixtures.fake_request):
+                    self.client.post('/dang-nhap/',{'username':'admin','password':'x'})
+                def remote(method,url,**kwargs):
+                    if ':'+service in url:
+                        return fixtures.make_response(403,{'detail':'Denied'})
+                    return fixtures.fake_request(method,url,**kwargs)
+                with patch('portal.api_client.requests.request',side_effect=remote):
+                    response=self.client.get('/')
+                self.assertEqual(response.status_code,200)
+                self.assertIsNone(response.context[counter])
+                self.assertIsNotNone(self.client.session.get('access_token'))
+                other='total_theses' if service=='8001' else 'total_students'
+                self.assertIsNotNone(response.context[other])
+
+    def test_period_denial_preserves_counts_and_session(self):
+        with patch('portal.api_client.requests.request',side_effect=fixtures.fake_request):
+            self.client.post('/dang-nhap/',{'username':'admin','password':'x'})
+        def remote(method,url,**kwargs):
+            if '/periods/current/' in url:
+                return fixtures.make_response(403,{'detail':'Denied'})
+            return fixtures.fake_request(method,url,**kwargs)
+        with patch('portal.api_client.requests.request',side_effect=remote):
+            response=self.client.get('/')
+        self.assertEqual(response.status_code,200)
+        self.assertIsNotNone(response.context['total_registrations'])
+        self.assertIsNone(response.context['period'])
+        self.assertFalse(response.context['show_period'])
+        self.assertIsNotNone(self.client.session.get('access_token'))
 
     def test_first_visit_always_shows_login_without_backend_calls(self):
         self.client.cookies.clear()

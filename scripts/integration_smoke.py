@@ -112,6 +112,25 @@ def main():
             assert topic_record['thesis_code']=='DT001'
             topic=topic_record['id']
             steps.append('Student/Thesis APIs allocate SV001/DT001 without manual codes')
+            # A fresh install must support all canonical roles through the real Portal.
+            for username in ('admin', 'gv1', 'sv'):
+                with requests.Session() as fresh_browser:
+                    page=fresh_browser.get(urls['portal']+'/',timeout=15)
+                    assert page.url.endswith('/dang-nhap/?next=%2F'),page.url
+                    csrf=re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"',page.text).group(1)
+                    page=fresh_browser.post(urls['portal']+'/dang-nhap/',data={'username':username,'password':password,'csrfmiddlewaretoken':csrf},timeout=15)
+                    assert page.status_code==200 and page.url==urls['portal']+'/',(username,page.status_code,page.url)
+                    assert 'Dashboard' in page.text and 'HTTP 403' not in page.text
+                    assert fresh_browser.get(urls['portal']+'/',timeout=15).url==urls['portal']+'/'
+                    if username!='admin':
+                        denied=fresh_browser.get(urls['portal']+'/sinh-vien/them/',timeout=15)
+                        assert denied.url==urls['portal']+'/' and 'name="full_name"' not in denied.text
+            steps.append('Fresh Portal login for ADMIN/LECTURER/STUDENT keeps session; non-admin create remains denied')
+            diagnostic_code="import os,runpy,getpass,builtins;getpass.getpass=lambda prompt:os.environ['TEST_ADMIN_PASSWORD'];builtins.input=lambda prompt:'admin';runpy.run_path('scripts/check_login.py',run_name='__main__')"
+            diagnostic=subprocess.run([sys.executable,'-B','-c',diagnostic_code],cwd=ROOT,env=env,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=60)
+            assert diagnostic.returncode==0,diagnostic.stdout+diagnostic.stderr
+            assert password not in diagnostic.stdout and admin not in diagnostic.stdout
+            steps.append('Read-only new-machine login diagnostic passes all real APIs without exposing credentials')
             now=datetime.now(timezone.utc)
             period={'name':'Đợt test','start_at':(now-timedelta(days=1)).isoformat(),'end_at':(now+timedelta(days=1)).isoformat(),'is_active':True}
             api('registration','POST','/api/periods/',201,admin,{**period,'max_active_per_student':1})

@@ -62,11 +62,11 @@
                 <td>{{ t.thesis_code }}</td>
                 <td>{{ t.title }}</td>
                 <td>{{ t.supervisor }}</td>
-                <td>{{ t.registered }}/{{ t.max_students }}</td>
+                <td>{{ t.registered|default_if_none:"—" }}/{{ t.max_students }}</td>
                 <td>{% include "portal/_thesis_status.html" with status=t.status %}</td>
             </tr>
         {% empty %}
-            <tr><td colspan="6" class="text-center text-muted">Chưa có đề tài.</td></tr>
+            <tr><td colspan="6" class="text-center text-muted">{% if theses_available %}Chưa có đề tài.{% else %}Không tải được dữ liệu đề tài.{% endif %}</td></tr>
         {% endfor %}
     </tbody>
 </table>

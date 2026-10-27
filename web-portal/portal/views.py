@@ -4,6 +4,8 @@ Các trang của Web Portal.
 Mỗi view chỉ gọi api_client (HTTP/REST) rồi đưa dữ liệu ra template.
 Không có model, không có truy vấn database.
 """
+import logging
+
 from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import redirect, render
@@ -224,14 +226,33 @@ def count_active_registrations(registrations):
 # ---------------------------------------------------------------- Dashboard
 @role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def dashboard(request):
-    students = fetch(request, api.students.list)
-    theses = fetch(request, api.theses.list)
-    registrations = fetch(request, api.registrations.list)
+    def section(func, default=None):
+        try:
+            return func()
+        except ServiceUnavailable as exc:
+            messages.error(request, translate_error(str(exc)))
+            return default
+        except api.Forbidden as exc:
+            service = exc.service_name or "API"
+            logging.getLogger(__name__).warning(
+                "Dashboard HTTP 403 from %s; Portal session preserved", service)
+            messages.error(request, f"{service} từ chối truy cập (HTTP 403). Phiên đăng nhập vẫn được giữ. Kiểm tra quyền tài khoản và cấu hình dịch vụ.")
+            return default
+
+    students = section(lambda: fetch(request, api.students.list))
+    theses = section(lambda: fetch(request, api.theses.list))
+    registrations = section(lambda: fetch(request, api.registrations.list))
 
     counts = count_active_registrations(registrations or [])
     recent_theses = sorted(theses or [], key=lambda t: t["id"], reverse=True)[:5]
     for t in recent_theses:
-        t["registered"] = counts.get(t["id"], 0)
+        t["registered"] = counts.get(t["id"], 0) if registrations is not None else None
+
+    period_unavailable = object()
+    period = section(api.current_period, default=period_unavailable) if registrations is not None else period_unavailable
+    if period is not period_unavailable and period:
+        period["start_at"] = parse_datetime(period["start_at"])
+        period["end_at"] = parse_datetime(period["end_at"])
 
     return render(request, "portal/dashboard.html", {
         "menu": "dashboard",
@@ -242,9 +263,10 @@ def dashboard(request):
         ),
         "total_registrations": len(registrations) if registrations is not None else None,
         "recent_theses": recent_theses,
+        "theses_available": theses is not None,
         # Registration Service tắt thì không hiện thông báo đợt (tránh báo sai "chưa mở đợt")
-        "show_period": registrations is not None,
-        "period": load_current_period(request) if registrations is not None else None,
+        "show_period": period is not period_unavailable,
+        "period": period if period is not period_unavailable else None,
     })
 
 
