@@ -1,9 +1,9 @@
 """
-WSGI config for config project.
+Cấu hình WSGI của project config.
 
-It exposes the WSGI callable as a module-level variable named ``application``.
+Biến ``application`` ở cấp module là đối tượng WSGI để máy chủ gọi.
 
-For more information on this file, see
+Xem thêm về file này tại
 https://docs.djangoproject.com/en/6.1/howto/deployment/wsgi/
 """
 

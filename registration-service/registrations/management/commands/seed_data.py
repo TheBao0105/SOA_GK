@@ -1,8 +1,9 @@
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from registrations.models import Registration
 from registrations.services import external_api
-from registrations.services.external_api import ServiceUnavailableError
+from registrations.services.external_api import ServiceAuthError, ServiceUnavailableError
 
 # (mã sinh viên, mã đề tài, trạng thái)
 SAMPLE_REGISTRATIONS = [
@@ -10,6 +11,16 @@ SAMPLE_REGISTRATIONS = [
     ("SV002", "DT001", Registration.Status.PENDING),
     ("SV003", "DT002", Registration.Status.APPROVED),
 ]
+
+
+SERVICE_TOKEN_HELP = (
+    "{reason}.\n"
+    "Tạo token mới và ghi vào registration-service\\.env (PowerShell, tại thư mục SOA_GK):\n"
+    "  cd identity-service\n"
+    "  python manage.py issue_service_token registration-service 2>$null | "
+    "ForEach-Object {{ \"SERVICE_TOKEN=$_\" }} | Add-Content ..\\registration-service\\.env\n"
+    "  cd ..\\registration-service; python manage.py seed_data"
+)
 
 
 class Command(BaseCommand):
@@ -20,6 +31,9 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
+        if not settings.SERVICE_TOKEN:
+            raise CommandError(SERVICE_TOKEN_HELP.format(reason="Chưa có SERVICE_TOKEN trong registration-service/.env"))
+
         try:
             for student_code, thesis_code, reg_status in SAMPLE_REGISTRATIONS:
                 # Không đọc student_db / thesis_db: hỏi các service qua HTTP
@@ -46,5 +60,9 @@ class Command(BaseCommand):
                 )
         except ServiceUnavailableError as exc:
             raise CommandError(f"{exc}. Hãy chạy Student Service và Thesis Service trước.")
+        except ServiceAuthError as exc:
+            raise CommandError(SERVICE_TOKEN_HELP.format(
+                reason=f"{exc} (SERVICE_TOKEN hết hạn, sai, hoặc khóa JWT đã được tạo lại)"
+            ))
 
         self.stdout.write(self.style.SUCCESS("Seed registrations done."))

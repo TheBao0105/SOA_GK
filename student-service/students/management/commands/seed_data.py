@@ -24,6 +24,14 @@ SAMPLE_STUDENTS = [
         "class_name": "KTPM2",
         "major": "Kỹ thuật phần mềm",
     },
+    # SV004 chưa đăng ký đề tài nào -> dùng để demo đăng ký thành công (README mục 8)
+    {
+        "student_code": "SV004",
+        "full_name": "Phạm Thị Dung",
+        "email": "dung.pham@student.edu.vn",
+        "class_name": "KTPM2",
+        "major": "Kỹ thuật phần mềm",
+    },
 ]
 
 

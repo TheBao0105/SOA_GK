@@ -1,0 +1,13 @@
+{% extends 'portal/base.html' %}
+{% block title %}Điểm đề tài{% endblock %}
+{% block content %}
+<h1 class="mb-3">{% if current_user.is_student %}Điểm của tôi{% else %}Quản lý điểm đề tài{% endif %}</h1>
+<p class="text-muted">Admin và giảng viên hướng dẫn nhập điểm trực tiếp theo thang 10 cho đăng ký đã duyệt. Kết quả hiển thị ngay sau khi lưu.</p>
+<div class="table-responsive"><table class="table table-bordered bg-white"><thead><tr><th>Sinh viên</th><th>Đề tài</th><th>Điểm / 10</th><th>Nhận xét</th><th>Người chấm</th><th>Thao tác</th></tr></thead><tbody>
+{% for r in rows %}<tr><td>{{ r.student_name }}</td><td>{{ r.thesis_title }}</td><td>{% if r.grade %}{{ r.grade.score }}{% else %}Chưa chấm{% endif %}</td><td>{{ r.grade.comment|default:'—'|linebreaksbr }}</td><td>{{ r.grade.lecturer_name|default:'—' }}</td><td class="text-nowrap"><a class="btn btn-sm btn-outline-info" href="{% url 'grade_detail' r.id %}">Chi tiết</a>
+{% if current_user.is_admin or current_user.is_lecturer %}
+<a class="btn btn-sm btn-primary" href="{% url 'grade_edit' r.id %}">{% if r.grade %}Sửa{% else %}Chấm điểm{% endif %}</a>
+{% if r.grade %}<a class="btn btn-sm btn-outline-danger" href="{% url 'grade_delete' r.id %}">Xóa</a>{% endif %}
+{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6" class="text-center text-muted">Chưa có đăng ký đã duyệt trong phạm vi của bạn.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

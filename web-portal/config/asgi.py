@@ -1,9 +1,9 @@
 """
-ASGI config for config project.
+Cấu hình ASGI của project config.
 
-It exposes the ASGI callable as a module-level variable named ``application``.
+Biến ``application`` ở cấp module là đối tượng ASGI để máy chủ gọi.
 
-For more information on this file, see
+Xem thêm về file này tại
 https://docs.djangoproject.com/en/6.1/howto/deployment/asgi/
 """
 

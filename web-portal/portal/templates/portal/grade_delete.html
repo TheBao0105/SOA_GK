@@ -1,0 +1,2 @@
+{% extends 'portal/base.html' %}
+{% block content %}<h1>Xóa điểm đề tài</h1><div class="card card-body" style="max-width:650px"><p>Sinh viên: <strong>{{ registration.student_name }}</strong></p><p>Đề tài: {{ registration.thesis_title }}</p><p>Điểm hiện tại: <strong>{{ grade.score }} / 10</strong></p><p>Xóa điểm sẽ đưa đăng ký về trạng thái chưa chấm. Lịch sử thay đổi vẫn được giữ.</p><form method="post">{% csrf_token %}<a class="btn btn-secondary" href="{% url 'grade_list' %}">Hủy</a> <button class="btn btn-danger">Xác nhận xóa điểm</button></form></div>{% endblock %}

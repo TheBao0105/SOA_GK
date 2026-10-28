@@ -9,4 +9,6 @@ urlpatterns = [
         views.RegistrationDetailView.as_view(),
         name="registration-detail",
     ),
+    path("registrations/<int:pk>/cancel/", views.RegistrationCancelView.as_view(), name="registration-cancel"),
+    path("registrations/<int:pk>/notes/", views.ProgressNoteListCreateView.as_view(), name="registration-notes"),
 ]

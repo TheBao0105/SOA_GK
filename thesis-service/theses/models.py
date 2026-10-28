@@ -13,6 +13,10 @@ class Thesis(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     supervisor = models.CharField(max_length=100, blank=True)
+    # id tài khoản giảng viên bên Identity Service (KHÔNG phải ForeignKey vì
+    # bảng tài khoản nằm ở auth_db). Dùng để biết giảng viên nào phụ trách đề tài.
+    supervisor_id = models.PositiveIntegerField(null=True, blank=True)
+    created_by = models.PositiveIntegerField(null=True, blank=True)
     max_students = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -24,3 +28,12 @@ class Thesis(models.Model):
 
     def __str__(self):
         return f"{self.thesis_code} - {self.title}"
+
+
+class ThesisCodeSequence(models.Model):
+    """Bộ đếm một dòng duy nhất; khóa dòng này trong lúc cấp mã và lưu bản ghi."""
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    value = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        db_table = "bo_dem_ma_detai"

@@ -7,6 +7,11 @@
 
 <div class="card" style="max-width: 600px">
     <div class="card-body">
+        {% if is_edit %}
+            <p>Mã sinh viên: <strong>{{ record.student_code }}</strong></p>
+        {% else %}
+            <p class="text-muted">Mã sinh viên được tạo tự động sau khi lưu.</p>
+        {% endif %}
         {% include "portal/_form_errors.html" %}
         <form method="post" novalidate>
             {% csrf_token %}

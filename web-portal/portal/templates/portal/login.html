@@ -1,0 +1,21 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Đăng nhập{% endblock %}
+
+{% block content %}
+<div class="card mx-auto mt-4" style="max-width: 420px">
+    <div class="card-body p-4">
+        <h1 class="mb-1">Đăng nhập</h1>
+        <p class="text-muted small mb-3">Dùng tài khoản do Identity Service cấp (username hoặc email).</p>
+        {% include "portal/_form_errors.html" %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+            {% for field in form %}
+                {% include "portal/_field.html" %}
+            {% endfor %}
+            <button type="submit" class="btn btn-primary w-100">Đăng nhập</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
