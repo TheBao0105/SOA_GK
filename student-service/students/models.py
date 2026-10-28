@@ -21,7 +21,7 @@ class Student(models.Model):
 
 
 class StudentCodeSequence(models.Model):
-    """Singleton counter; lock this row while allocating and saving a code."""
+    """Bộ đếm một dòng duy nhất; khóa dòng này trong lúc cấp mã và lưu bản ghi."""
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     value = models.PositiveBigIntegerField(default=0)
 

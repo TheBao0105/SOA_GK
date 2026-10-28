@@ -52,17 +52,17 @@ class ThesisAPITests(AuthenticatedAPITestCase):
         self.assertEqual(len(response.data), 1)
 
     def test_search_theses(self):
-        # Tim theo tu khoa co trong description
+        # Tìm theo từ khóa có trong mô tả
         response = self.client.get(self.list_url, {"search": "web"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
 
-        # Tim theo ma de tai
+        # Tìm theo mã đề tài
         response = self.client.get(self.list_url, {"search": "DT001"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
 
-        # Tu khoa khong ton tai
+        # Từ khóa không tồn tại
         response = self.client.get(self.list_url, {"search": "blockchain"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 0)

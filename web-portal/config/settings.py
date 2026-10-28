@@ -18,6 +18,17 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-web-portal")
 DEBUG = os.getenv("DEBUG", "True") == "True"
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if h.strip()]
 
+# Giữ cấu hình triển khai thật giống các API service: chặn SECRET_KEY yếu khi DEBUG=False.
+if not DEBUG and (SECRET_KEY.startswith("dev-secret-key") or len(SECRET_KEY) < 50):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured("Production requires a unique SECRET_KEY of at least 50 characters.")
+
+SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", str(not DEBUG)) == "True"
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "3600" if not DEBUG else "0"))
+CSRF_TRUSTED_ORIGINS = [v.strip() for v in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if v.strip()]
+if os.getenv("TRUST_PROXY_HEADERS", "False") == "True":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
@@ -67,7 +78,7 @@ SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_AGE = 60 * 60 * 24  # bằng thời hạn refresh token (24 giờ)
-SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "False") == "True"  # True khi chạy HTTPS
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", str(not DEBUG)) == "True"  # True khi chạy HTTPS
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
 LANGUAGE_CODE = "vi"

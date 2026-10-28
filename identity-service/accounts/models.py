@@ -100,7 +100,7 @@ class AuditLog(models.Model):
 
 
 class RevokedAccessToken(models.Model):
-    """Only token identifiers, never raw bearer tokens; supports immediate logout revocation."""
+    """Chỉ lưu mã định danh token (jti), không lưu token gốc; dùng để thu hồi ngay khi đăng xuất."""
     jti = models.CharField(max_length=64, primary_key=True)
     expires_at = models.DateTimeField()
 

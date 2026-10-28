@@ -37,7 +37,7 @@ SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "3600" if not DEBUG e
 SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv("SECURE_HSTS_INCLUDE_SUBDOMAINS", "False") == "True"
 SECURE_HSTS_PRELOAD = os.getenv("SECURE_HSTS_PRELOAD", "False") == "True"
 CSRF_TRUSTED_ORIGINS = [v.strip() for v in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if v.strip()]
-# Enable only behind a trusted reverse proxy that strips client-supplied forwarded headers.
+# Chỉ bật khi chạy sau reverse proxy tin cậy (proxy xóa header X-Forwarded do client tự gửi).
 if os.getenv("TRUST_PROXY_HEADERS", "False") == "True":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -142,7 +142,7 @@ SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_SETTINGS": {"persistAuthorization": True},
 }
 
-# ----------------------------------------------------------------- JWT
+# ----------------------------------------------------------------- Xác thực JWT
 JWT_ALGORITHM = "RS256"
 JWT_ISSUER = os.getenv("JWT_ISSUER", "identity-service")
 # Khóa BÍ MẬT (chỉ Identity Service có) và khóa CÔNG KHAI (chia cho các service khác)

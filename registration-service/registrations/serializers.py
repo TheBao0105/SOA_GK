@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import ProgressNote, Registration, RegistrationPeriod
+from .models import ProgressNote, Registration
 
 
 class RegistrationSerializer(serializers.ModelSerializer):
@@ -14,11 +14,11 @@ class RegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Registration
         fields = [
-            "id", "student_id", "thesis_id", "period", "registered_at", "status",
+            "id", "student_id", "thesis_id", "registered_at", "status",
             "processed_by", "processed_at", "reject_reason", "cancelled_by", "cancelled_at",
         ]
         read_only_fields = [
-            "id", "period", "registered_at", "status",
+            "id", "registered_at", "status",
             "processed_by", "processed_at", "reject_reason", "cancelled_by", "cancelled_at",
         ]
         # Tắt validator "unique together" tự động của DRF để view tự trả về
@@ -42,7 +42,7 @@ class RegistrationUpdateSerializer(serializers.ModelSerializer):
         model = Registration
         fields = RegistrationSerializer.Meta.fields
         read_only_fields = [
-            "id", "student_id", "thesis_id", "period", "registered_at",
+            "id", "student_id", "thesis_id", "registered_at",
             "processed_by", "processed_at", "cancelled_by", "cancelled_at",
         ]
 
@@ -55,25 +55,6 @@ class RegistrationUpdateSerializer(serializers.ModelSerializer):
             attrs["reject_reason"] = reason
         else:
             attrs["reject_reason"] = ""
-        return attrs
-
-
-class RegistrationPeriodSerializer(serializers.ModelSerializer):
-    is_open = serializers.SerializerMethodField()
-
-    class Meta:
-        model = RegistrationPeriod
-        fields = ["id", "name", "start_at", "end_at", "is_active", "max_active_per_student", "is_open", "created_at"]
-        read_only_fields = ["id", "is_open", "created_at"]
-
-    def get_is_open(self, obj) -> bool:
-        return obj.is_open()
-
-    def validate(self, attrs):
-        start = attrs.get("start_at", getattr(self.instance, "start_at", None))
-        end = attrs.get("end_at", getattr(self.instance, "end_at", None))
-        if start and end and end <= start:
-            raise serializers.ValidationError({"end_at": ["end_at must be after start_at."]})
         return attrs
 
 

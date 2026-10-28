@@ -1,3 +1,3 @@
 from django.db import models
 
-# Create your models here.
+# Portal không có database nghiệp vụ nên không khai báo model.

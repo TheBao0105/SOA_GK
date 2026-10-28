@@ -31,14 +31,14 @@ class ServiceUnavailableError(Exception):
 
 
 class ServiceContractError(ServiceUnavailableError):
-    """HTTP succeeds but the returned JSON violates the fields this caller needs."""
+    """HTTP thành công nhưng JSON trả về không đúng các trường mà bên gọi cần."""
 
     def __init__(self, service_name):
         super().__init__(service_name, f"{service_name} returned an invalid API response")
 
 
 def _invalid(service_name):
-    # Do not log response bodies: they may include personal data.
+    # Không ghi nội dung phản hồi vào log vì có thể chứa dữ liệu cá nhân.
     logger.warning("%s returned JSON that violates the API contract", service_name)
     raise ServiceContractError(service_name)
 
@@ -89,7 +89,7 @@ def _get_json(service_name, url, token=None):
     logger.info("Calling %s: GET %s", service_name, url)  # không ghi token vào log
     try:
         response = requests.get(url, headers=_auth_headers(token), timeout=settings.EXTERNAL_API_TIMEOUT)
-    except requests.RequestException as exc:  # ConnectionError, Timeout, ...
+    except requests.RequestException as exc:  # Lỗi kết nối, quá thời gian chờ, ...
         logger.warning("%s error: %s", service_name, exc)
         raise ServiceUnavailableError(service_name) from exc
 
@@ -146,10 +146,3 @@ def find_thesis_by_code(thesis_code, token=None):
     url = f"{settings.THESIS_SERVICE_URL}/api/theses/?search={thesis_code}"
     theses = _records(_get_json("Thesis Service", url, token), "Thesis Service", "thesis_code")
     return next((t for t in theses if t["thesis_code"] == thesis_code), None)
-
-
-def validate_account(data, account_id):
-    _record(data, "Identity Service", expected_id=account_id)
-    if data.get("role") not in ("ADMIN", "LECTURER", "STUDENT") or type(data.get("is_active")) is not bool:
-        _invalid("Identity Service")
-    return data

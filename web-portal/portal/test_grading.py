@@ -1,98 +1,153 @@
 from unittest.mock import patch
 from django.test import Client
 from . import tests as fixtures
-from .grading_forms import DEFAULT_CRITERIA
 
-PERIOD={"id":1,"name":"Đợt chấm","start_at":"2026-01-01T00:00:00+07:00","end_at":"2027-01-01T00:00:00+07:00","is_active":True,"is_open":True,"criteria":DEFAULT_CRITERIA}
-ASSESSMENT={"id":1,"registration":1,"student_id":1,"thesis_id":1,"period":1,"period_name":"Đợt chấm","criteria":DEFAULT_CRITERIA,"status":"UNGRADED","final_score":None,"published_at":None,"assignments":[{"id":1,"lecturer_id":2,"lecturer_name":"GV A","scores":{},"comment":"<script>alert(1)</script>","submitted_at":None,"total":None}]}
+REGISTRATION={"id":1,"student_id":1,"thesis_id":1,"status":"APPROVED"}
+GRADE={"id":1,"registration":1,"student_id":1,"thesis_id":1,"score":"8.50","comment":"<script>alert(1)</script>","lecturer_id":2,"lecturer_name":"GV A"}
 
 
 def remote(method,url,**kwargs):
     if method=="GET":
-        if url.endswith("/api/grading/assessments/1/history/"):
+        if url.endswith('/api/grading/grades/1/history/'):
             return fixtures.make_response(200,[])
-        if url.endswith("/api/grading/assessments/1/"):
-            return fixtures.make_response(200,ASSESSMENT)
-        if url.endswith("/api/grading/assessments/"):
-            return fixtures.make_response(200,[ASSESSMENT])
-        if url.endswith("/api/grading/periods/1/"):
-            return fixtures.make_response(200,PERIOD)
-        if url.endswith("/api/grading/periods/"):
-            return fixtures.make_response(200,[PERIOD])
-        if url.endswith("/api/users/2/"):
+        if url.endswith('/api/registrations/1/'):
+            return fixtures.make_response(200,REGISTRATION)
+        if url.endswith('/api/registrations/'):
+            return fixtures.make_response(200,[REGISTRATION])
+        if url.endswith('/api/grading/grades/'):
+            return fixtures.make_response(200,[GRADE])
+        if url.endswith('/api/users/2/'):
             return fixtures.make_response(200,{"id":2,"username":"gv","full_name":"GV A","email":"gv@test.local","role":"LECTURER","student_id":None,"is_active":True})
-        if url.endswith("/api/users/"):
-            return fixtures.make_response(200,[{"id":2,"username":"gv","full_name":"GV A","is_active":True}])
-        if url.endswith("/api/audit-logs/"):
-            return fixtures.make_response(200,[{"created_at":"2026-10-27","action":"LOGIN_SUCCESS","username":"admin","actor_id":1,"detail":""}])
-        if url.endswith("/api/auth/me/"):
+        if url.endswith('/api/audit-logs/'):
+            return fixtures.make_response(200,[])
+        if url.endswith('/api/auth/me/'):
             return fixtures.make_response(200,{"id":1,"username":"admin","full_name":"Admin","email":"admin@example.com"})
     return fixtures.fake_request(method,url,**kwargs)
 
 
-@patch("portal.api_client.requests.request",side_effect=remote)
-class GradingPortalTests(fixtures.LoggedInTestCase):
+@patch('portal.api_client.requests.request',side_effect=remote)
+class DirectGradePortalTests(fixtures.LoggedInTestCase):
     def role(self,role,user_id=1):
         session=self.client.session
-        user=dict(session['user'])
-        user.update(role=role,id=user_id)
-        session['user']=user
+        session['user']={**session['user'],'role':role,'id':user_id}
         session.save()
         self.client.cookies['sessionid']=session.session_key
 
-    def test_admin_pages_render(self,mock):
-        for url in ('/cham-diem/','/cham-diem/them/','/cham-diem/1/','/dot-cham-diem/','/dot-cham-diem/them/','/dot-cham-diem/1/sua/','/ho-so/','/nhat-ky/','/tai-khoan/2/sua/'):
-            response=self.client.get(url)
-            self.assertEqual(response.status_code,200,url)
-            self.assertContains(response,'csrfmiddlewaretoken')
+    def test_admin_sees_simple_grade_management(self,mock):
+        response=self.client.get('/cham-diem/')
+        self.assertContains(response,'Quản lý điểm đề tài')
+        self.assertContains(response,'8.50')
+        for text in ('Đợt chấm','Tạo hồ sơ','Phân công','Công bố'):
+            self.assertNotContains(response,text)
 
-    def test_student_cannot_open_admin_pages_or_mutate_grades(self,mock):
+    def test_lecturer_sees_edit_link_and_prepopulated_score(self,mock):
+        self.role('LECTURER',2)
+        self.assertContains(self.client.get('/cham-diem/'),'/cham-diem/1/')
+        self.assertContains(self.client.get('/cham-diem/1/'),'value="8.50"')
+
+    def test_direct_score_post_sends_only_registration_score_comment(self,mock):
+        self.role('LECTURER',2)
+        with patch('portal.api_client.grades.create',return_value=GRADE) as save:
+            response=self.client.post('/cham-diem/1/',{'score':'9.25','comment':'Tốt'})
+        self.assertRedirects(response,'/cham-diem/',fetch_redirect_response=False)
+        save.assert_called_once_with({'registration':1,'score':'9.25','comment':'Tốt'})
+
+    def test_invalid_score_preserves_form_and_never_calls_save(self,mock):
+        self.role('LECTURER',2)
+        for score in ('11','-1','NaN','1.001',''):
+            with patch('portal.api_client.grades.create') as save:
+                response=self.client.post('/cham-diem/1/',{'score':score})
+            self.assertEqual(response.status_code,200)
+            self.assertTrue(response.context['form'].errors)
+            save.assert_not_called()
+
+    def test_student_can_read_grade_but_cannot_open_score_form(self,mock):
         self.role('STUDENT',4)
-        for url in ('/cham-diem/them/','/dot-cham-diem/them/','/nhat-ky/'):
-            self.assertEqual(self.client.get(url).status_code,302)
-        count=mock.call_count
-        self.assertEqual(self.client.post('/cham-diem/1/',{'action':'publish'}).status_code,302)
-        self.assertFalse(any(call.args[0]=='POST' for call in mock.call_args_list[count:]))
-
-    def test_lecturer_score_form_sends_decimal_strings(self,mock):
-        self.role('LECTURER',2)
-        with patch('portal.api_client.grading_action',return_value={}) as action:
-            data={'action':'scores','submit':'true','comment':'Tốt',**{'score_'+c['code']:'8.25' for c in DEFAULT_CRITERIA}}
-            self.assertEqual(self.client.post('/cham-diem/1/',data).status_code,302)
-            action.assert_called_once()
-            self.assertEqual(action.call_args.args[2]['scores']['completion'],'8.25')
-            self.assertTrue(action.call_args.args[2]['submit'])
-
-    def test_lecturer_cannot_publish(self,mock):
-        self.role('LECTURER',2)
-        with patch('portal.api_client.grading_action') as action:
-            self.client.post('/cham-diem/1/',{'action':'publish'})
-            action.assert_not_called()
-
-    def test_score_validation_preserves_form(self,mock):
-        self.role('LECTURER',2)
-        response=self.client.post('/cham-diem/1/',{'action':'scores','score_completion':'11'})
-        self.assertEqual(response.status_code,200)
-        self.assertTrue(response.context['score_form'].errors)
+        self.assertContains(self.client.get('/cham-diem/'),'8.50')
+        self.assertRedirects(self.client.get('/cham-diem/1/'),'/',fetch_redirect_response=False)
+        with patch('portal.api_client.grades.create') as save:
+            self.client.post('/cham-diem/1/',{'score':'10'})
+        save.assert_not_called()
 
     def test_comments_are_escaped(self,mock):
-        response=self.client.get('/cham-diem/1/')
+        response=self.client.get('/cham-diem/')
         self.assertContains(response,'&lt;script&gt;alert(1)&lt;/script&gt;')
         self.assertNotContains(response,'<script>alert(1)</script>')
 
-    def test_profile_updates_session_name(self,mock):
-        with patch('portal.api_client.my_profile',side_effect=[{'email':'admin@example.com','full_name':'Admin'}, {'id':1,'username':'admin','full_name':'Tên mới','email':'new@example.com'}]):
-            self.assertEqual(self.client.post('/ho-so/',{'full_name':'Tên mới','email':'new@example.com'}).status_code,302)
-            self.assertEqual(self.client.session['user']['full_name'],'Tên mới')
+    def test_ungraded_registration_has_direct_score_link(self,mock):
+        self.role('LECTURER',2)
+        with patch('portal.api_client.grades.list',return_value=[]):
+            response=self.client.get('/cham-diem/')
+        self.assertContains(response,'Chưa chấm')
+        self.assertContains(response,'/cham-diem/1/')
 
-    def test_csrf_required_for_grade_changes(self,mock):
+    def test_pending_registration_cannot_open_form(self,mock):
+        self.role('LECTURER',2)
+        with patch('portal.api_client.registrations.get',return_value={**REGISTRATION,'status':'PENDING'}), patch('portal.api_client.grades.create') as save:
+            response=self.client.post('/cham-diem/1/',{'score':'10'})
+        self.assertRedirects(response,'/cham-diem/',fetch_redirect_response=False)
+        save.assert_not_called()
+
+    def test_csrf_required(self,mock):
+        self.role('LECTURER',2)
         client=Client(enforce_csrf_checks=True)
         client.cookies=self.client.cookies
-        self.assertEqual(client.post('/cham-diem/1/',{'action':'publish'}).status_code,403)
+        self.assertEqual(client.post('/cham-diem/1/',{'score':'8'}).status_code,403)
 
-
-    def test_account_edit_omits_empty_password(self,mock):
+    def test_profile_and_account_edit_still_work(self,mock):
+        self.assertEqual(self.client.get('/ho-so/').status_code,200)
         with patch('portal.api_client.users.update',return_value={}) as update:
             response=self.client.post('/tai-khoan/2/sua/',{'username':'gv','email':'gv@test.local','full_name':'Tên mới','role':'LECTURER','student_id':'','password':''})
-            self.assertEqual(response.status_code,302)
-            self.assertNotIn('password',update.call_args.args[1])
+        self.assertEqual(response.status_code,302)
+        self.assertNotIn('password',update.call_args.args[1])
+
+    def test_obsolete_workflow_urls_are_removed(self,mock):
+        for path in ('/dot-cham-diem/','/dot-cham-diem/them/','/cham-diem/them/'):
+            self.assertEqual(self.client.get(path).status_code,404)
+
+    def test_admin_sees_detail_edit_delete_buttons(self,mock):
+        response=self.client.get('/cham-diem/')
+        for path in ('/cham-diem/1/chi-tiet/','/cham-diem/1/','/cham-diem/1/xoa/'):
+            self.assertContains(response,path)
+        detail=self.client.get('/cham-diem/1/chi-tiet/')
+        self.assertContains(detail,'Chi tiết điểm đề tài')
+        self.assertContains(detail,'8.50')
+        self.assertNotContains(detail,'<script>alert(1)</script>')
+
+    def test_admin_can_edit(self,mock):
+        with patch('portal.api_client.grades.create',return_value=GRADE) as save:
+            response=self.client.post('/cham-diem/1/',{'score':'8','comment':'Admin sửa'})
+        self.assertEqual(response.status_code,302)
+        save.assert_called_once()
+
+    def test_delete_requires_post_and_csrf_and_get_only_confirms(self,mock):
+        with patch('portal.api_client.grades.delete') as delete:
+            confirmation=self.client.get('/cham-diem/1/xoa/')
+            self.assertContains(confirmation,'Xác nhận xóa điểm')
+            delete.assert_not_called()
+            client=Client(enforce_csrf_checks=True)
+            client.cookies=self.client.cookies
+            self.assertEqual(client.post('/cham-diem/1/xoa/').status_code,403)
+            delete.assert_not_called()
+            response=self.client.post('/cham-diem/1/xoa/')
+            self.assertRedirects(response,'/cham-diem/',fetch_redirect_response=False)
+            delete.assert_called_once_with(1)
+
+    def test_student_has_detail_only_and_cannot_delete(self,mock):
+        self.role('STUDENT',4)
+        response=self.client.get('/cham-diem/')
+        self.assertContains(response,'/cham-diem/1/chi-tiet/')
+        self.assertNotContains(response,'/cham-diem/1/xoa/')
+        self.assertEqual(self.client.get('/cham-diem/1/chi-tiet/').status_code,200)
+        with patch('portal.api_client.grades.delete') as delete:
+            self.assertEqual(self.client.post('/cham-diem/1/xoa/').status_code,302)
+            delete.assert_not_called()
+
+    def test_ungraded_row_has_no_delete_button(self,mock):
+        with patch('portal.api_client.grades.list',return_value=[]):
+            response=self.client.get('/cham-diem/')
+            self.assertNotContains(response,'/cham-diem/1/xoa/')
+            self.assertContains(response,'Chấm điểm')
+            with patch('portal.api_client.grades.delete') as delete:
+                self.assertEqual(self.client.post('/cham-diem/1/xoa/').status_code,302)
+                delete.assert_not_called()

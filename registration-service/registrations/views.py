@@ -11,17 +11,15 @@ from rest_framework import generics, status
 from rest_framework.exceptions import APIException
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from config.permissions import (
     ADMIN, ALL_ROLES, LECTURER, STUDENT, RolePermission, is_lecturer, is_student,
 )
 
-from .models import ProgressNote, Registration, RegistrationLock, RegistrationPeriod
+from .models import ProgressNote, Registration, RegistrationLock
 from .serializers import (
     ErrorSerializer,
     ProgressNoteSerializer,
-    RegistrationPeriodSerializer,
     RegistrationSerializer,
     RegistrationUpdateSerializer,
 )
@@ -54,12 +52,12 @@ class RegistrationBusy(APIException):
 
 # ---------------------------------------------------------------- Phân quyền
 # Ma trận quyền của Registration Service
-#   ADMIN    : xem / tạo / duyệt / hủy / xóa mọi đăng ký, quản lý đợt đăng ký
+#   ADMIN    : xem / tạo / duyệt / hủy / xóa mọi đăng ký
 #   LECTURER : chỉ xem và duyệt / từ chối đăng ký thuộc đề tài mình hướng dẫn
 #              (danh sách đề tài lấy từ Thesis Service theo supervisor_id),
 #              ghi nhận xét / tiến độ cho đăng ký đã duyệt
 #   STUDENT  : chỉ đăng ký cho CHÍNH MÌNH, chỉ xem đăng ký của mình,
-#              chỉ hủy khi đăng ký còn PENDING và đợt đăng ký còn mở
+#              chỉ hủy khi đăng ký còn PENDING
 #   SERVICE  : chỉ xem
 REGISTRATION_WRITE_ROLES = {
     "POST": (ADMIN, STUDENT),
@@ -137,7 +135,7 @@ def check_remote_rules(student_id, thesis_id, token=None):
 # BẮT BUỘC gọi bên trong transaction.atomic() SAU KHI đã khóa
 # RegistrationLock của đề tài và sinh viên, để hai request đến cùng lúc
 # không cùng "thấy còn chỗ" rồi cùng lưu (vượt chỉ tiêu).
-def check_local_limits(student_id, thesis, period, exclude_registration_id=None):
+def check_local_limits(student_id, thesis, exclude_registration_id=None):
 
     # Chỉ đếm các đăng ký còn hiệu lực (PENDING, APPROVED);
     # đăng ký bị từ chối hoặc đã hủy không chiếm chỗ
@@ -154,9 +152,8 @@ def check_local_limits(student_id, thesis, period, exclude_registration_id=None)
         return "Thesis has reached maximum students"
 
     # BƯỚC 4b: Sinh viên đã có đủ số đăng ký còn hiệu lực chưa?
-    # (mặc định mỗi sinh viên chỉ có 1 đăng ký hiệu lực; cấu hình theo đợt)
-    limit = period.max_active_per_student if period else 1
-    if active.filter(student_id=student_id).count() >= limit:
+    # Mỗi sinh viên chỉ có một đăng ký còn hiệu lực.
+    if active.filter(student_id=student_id).count() >= 1:
         return "Student already has an active registration"
 
     # BƯỚC 5: Tất cả điều kiện đều hợp lệ
@@ -174,7 +171,7 @@ class RegistrationDatabaseError(APIException):
 
 
 def is_retryable_lock_error(exc):
-    """Retry SQL Server deadlocks/lock timeouts, not every database failure."""
+    """Chỉ thử lại khi SQL Server báo deadlock/hết thời gian chờ khóa, không thử lại mọi lỗi database."""
     if not isinstance(exc, OperationalError):
         return False
     current = exc
@@ -242,16 +239,17 @@ STATUS_ENUM = [s.value for s in Registration.Status]
             OpenApiParameter("thesis_id", int, description="Lọc theo đề tài"),
             OpenApiParameter("status", str, enum=STATUS_ENUM, description="Lọc theo trạng thái"),
             OpenApiParameter("active", bool, description="true: chỉ đăng ký còn hiệu lực (PENDING, APPROVED)"),
-            OpenApiParameter("period_id", int, description="Lọc theo đợt đăng ký"),
         ],
     ),
     post=extend_schema(
-        summary="Đăng ký đề tài (gọi Student Service + Thesis Service, cần đợt đăng ký đang mở)",
+        summary="Đăng ký đề tài (gọi Student Service + Thesis Service)",
         responses={201: RegistrationSerializer, **ERROR_RESPONSES},
     ),
 )
 class RegistrationListCreateView(generics.ListCreateAPIView):
     """
+    Danh sách đăng ký và tạo đăng ký mới.
+
     GET  /api/registrations/?student_id=1&thesis_id=1&status=APPROVED&active=true
     POST /api/registrations/   body: {"student_id": 1, "thesis_id": 1}
     """
@@ -277,8 +275,6 @@ class RegistrationListCreateView(generics.ListCreateAPIView):
             queryset = queryset.filter(status=params["status"].upper())
         if params.get("active", "").lower() in ("1", "true"):
             queryset = queryset.filter(status__in=Registration.ACTIVE_STATUSES)
-        if params.get("period_id", "").isdigit():
-            queryset = queryset.filter(period_id=params["period_id"])
         return queryset
 
     # Phương thức này được gọi khi client gửi yêu cầu POST
@@ -310,10 +306,6 @@ class RegistrationListCreateView(generics.ListCreateAPIView):
                     status.HTTP_403_FORBIDDEN,
                 )
 
-        # Chỉ đăng ký được trong đợt đăng ký đang mở
-        period = RegistrationPeriod.current()
-        if period is None:
-            return error_response("Registration period is closed")
 
         # Kiểm tra trong cơ sở dữ liệu của Registration Service
         # xem sinh viên đã đăng ký đề tài này hay chưa.
@@ -345,7 +337,7 @@ class RegistrationListCreateView(generics.ListCreateAPIView):
                 if current.is_active:
                     raise BusinessRuleError("Student has already registered for this thesis")
             error = check_local_limits(
-                student_id, thesis, period,
+                student_id, thesis,
                 exclude_registration_id=existing.id if existing else None,
             )
             if error:
@@ -355,7 +347,6 @@ class RegistrationListCreateView(generics.ListCreateAPIView):
                 # Đăng ký lại đề tài đã hủy / bị từ chối trước đó
                 registration = Registration.objects.select_for_update().get(pk=existing.pk)
                 registration.status = Registration.Status.PENDING
-                registration.period = period
                 registration.registered_at = timezone.now()
                 registration.processed_by = None
                 registration.processed_at = None
@@ -365,7 +356,7 @@ class RegistrationListCreateView(generics.ListCreateAPIView):
                 registration.save()
                 return registration
             return Registration.objects.create(
-                student_id=student_id, thesis_id=thesis_id, period=period
+                student_id=student_id, thesis_id=thesis_id
             )
 
         try:
@@ -448,11 +439,11 @@ class RegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
             current = Registration.objects.select_for_update().get(pk=instance.pk)
             if current.status != instance.status:
                 raise BusinessRuleError("Registration changed; please reload and try again")
-            if new_status != Registration.Status.APPROVED and current.assessments.exists():
+            if new_status != Registration.Status.APPROVED and (current.grades.exists() or current.grade_history.exists()):
                 raise BusinessRuleError("Registration has grading records and must remain approved")
             if reopening:
                 error = check_local_limits(
-                    instance.student_id, thesis, instance.period, exclude_registration_id=instance.id
+                    instance.student_id, thesis, exclude_registration_id=instance.id
                 )
                 if error:
                     raise BusinessRuleError(error)
@@ -474,7 +465,7 @@ class RegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
         with transaction.atomic():
             obj = self.get_object()
             obj = Registration.objects.select_for_update().get(pk=obj.pk)
-            if obj.assessments.exists():
+            if (obj.grades.exists() or obj.grade_history.exists()):
                 return error_response("Registration has grading records", status.HTTP_409_CONFLICT)
             obj.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -484,7 +475,7 @@ class RegistrationCancelView(generics.GenericAPIView):
     """
     POST /api/registrations/{id}/cancel/
 
-    - Sinh viên: chỉ hủy đăng ký của mình khi còn PENDING và đợt đăng ký còn mở.
+    - Sinh viên: chỉ hủy đăng ký của mình khi còn PENDING.
     - Admin: hủy được đăng ký PENDING hoặc APPROVED.
     Đăng ký không bị xóa mà chuyển sang CANCELLED (giữ lịch sử, trả lại chỗ cho đề tài).
     """
@@ -502,15 +493,13 @@ class RegistrationCancelView(generics.GenericAPIView):
         with transaction.atomic():
             registration = self.get_object()
             registration = Registration.objects.select_for_update().get(pk=registration.pk)
-            if registration.assessments.exists():
+            if (registration.grades.exists() or registration.grade_history.exists()):
                 return error_response("Registration has grading records", status.HTTP_409_CONFLICT)
             if registration.status == Registration.Status.CANCELLED:
                 return error_response("Registration is already cancelled")
             if is_student(request.user):
                 if registration.status != Registration.Status.PENDING:
                     return error_response("Only pending registrations can be cancelled")
-                if registration.period is not None and not registration.period.is_open():
-                    return error_response("Registration period is closed")
             elif not registration.is_active:
                 return error_response("Only pending or approved registrations can be cancelled")
 
@@ -541,57 +530,18 @@ class ProgressNoteListCreateView(generics.ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         registration = self.get_registration()
-        if registration.status != Registration.Status.APPROVED:
-            return error_response("Progress notes can only be added to approved registrations")
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(
-            registration=registration,
-            author_id=request.user.id,
-            author_name=request.user.full_name,
-            author_role=request.user.role,
-        )
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-# ---------------------------------------------------------------- Đợt đăng ký
-PERIOD_WRITE_ROLES = {"POST": (ADMIN,), "PUT": (ADMIN,), "PATCH": (ADMIN,), "DELETE": (ADMIN,)}
-
-
-@extend_schema_view(get=extend_schema(summary="Danh sách đợt đăng ký"), post=extend_schema(summary="Tạo đợt (ADMIN)"))
-class PeriodListCreateView(generics.ListCreateAPIView):
-    queryset = RegistrationPeriod.objects.all()
-    serializer_class = RegistrationPeriodSerializer
-    permission_classes = [IsAuthenticated, RolePermission]
-    read_roles = ALL_ROLES
-    write_roles = PERIOD_WRITE_ROLES
-
-
-class PeriodDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = RegistrationPeriod.objects.all()
-    serializer_class = RegistrationPeriodSerializer
-    permission_classes = [IsAuthenticated, RolePermission]
-    read_roles = ALL_ROLES
-    write_roles = PERIOD_WRITE_ROLES
-
-    def destroy(self, request, *args, **kwargs):
-        try:
-            return super().destroy(request, *args, **kwargs)
-        except ProtectedError:
-            return error_response(
-                "This period already has registrations; deactivate it instead", status.HTTP_409_CONFLICT
+        with transaction.atomic():
+            registration = generics.get_object_or_404(
+                Registration.objects.select_for_update(), pk=registration.pk
             )
-
-
-class CurrentPeriodView(APIView):
-    """GET /api/periods/current/ -> đợt đang mở, hoặc 404 nếu chưa mở đợt nào."""
-
-    permission_classes = [IsAuthenticated, RolePermission]
-    read_roles = ALL_ROLES
-
-    @extend_schema(summary="Đợt đăng ký đang mở", responses={200: RegistrationPeriodSerializer, 404: ErrorSerializer})
-    def get(self, request):
-        period = RegistrationPeriod.current()
-        if period is None:
-            return error_response("No registration period is open", status.HTTP_404_NOT_FOUND)
-        return Response(RegistrationPeriodSerializer(period).data)
+            if registration.status != Registration.Status.APPROVED:
+                return error_response("Progress notes can only be added to approved registrations")
+            serializer.save(
+                registration=registration,
+                author_id=request.user.id,
+                author_name=request.user.full_name,
+                author_role=request.user.role,
+            )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

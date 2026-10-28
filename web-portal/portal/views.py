@@ -33,7 +33,6 @@ from .forms import (
     AccountForm,
     ChangePasswordForm,
     LoginForm,
-    PeriodForm,
     ProgressNoteForm,
     RegistrationForm,
     StudentForm,
@@ -94,7 +93,6 @@ def change_password_view(request):
         except ServiceUnavailable as exc:
             form.add_error(None, translate_error(str(exc)))
     return render(request, "portal/change_password.html", {"menu": "account", "form": form})
-
 
 
 # request chứa thông tin yêu cầu HTTP từ trình duyệt của người dùng
@@ -184,8 +182,6 @@ def registration_create(request):
             # cả dữ liệu nhập và thông báo lỗi nếu có
             "form": form,
 
-            # Đợt đăng ký đang mở (None -> hiển thị cảnh báo "chưa mở đợt")
-            "period": load_current_period(request),
         }
     )
 
@@ -205,15 +201,6 @@ STATUS_LABELS = [
 ]
 
 
-def load_current_period(request):
-    """Đợt đăng ký đang mở; None nếu chưa mở đợt hoặc Registration Service đang tắt."""
-    period = fetch(request, api.current_period)
-    if period:
-        period["start_at"] = parse_datetime(period["start_at"])
-        period["end_at"] = parse_datetime(period["end_at"])
-    return period
-
-
 def count_active_registrations(registrations):
     """Đếm số đăng ký còn hiệu lực (PENDING / APPROVED) theo từng đề tài."""
     counts = {}
@@ -223,7 +210,7 @@ def count_active_registrations(registrations):
     return counts
 
 
-# ---------------------------------------------------------------- Dashboard
+# ---------------------------------------------------------------- Trang tổng quan
 @role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def dashboard(request):
     def section(func, default=None):
@@ -248,12 +235,6 @@ def dashboard(request):
     for t in recent_theses:
         t["registered"] = counts.get(t["id"], 0) if registrations is not None else None
 
-    period_unavailable = object()
-    period = section(api.current_period, default=period_unavailable) if registrations is not None else period_unavailable
-    if period is not period_unavailable and period:
-        period["start_at"] = parse_datetime(period["start_at"])
-        period["end_at"] = parse_datetime(period["end_at"])
-
     return render(request, "portal/dashboard.html", {
         "menu": "dashboard",
         "total_students": len(students) if students is not None else None,
@@ -264,9 +245,6 @@ def dashboard(request):
         "total_registrations": len(registrations) if registrations is not None else None,
         "recent_theses": recent_theses,
         "theses_available": theses is not None,
-        # Registration Service tắt thì không hiện thông báo đợt (tránh báo sai "chưa mở đợt")
-        "show_period": period is not period_unavailable,
-        "period": period if period is not period_unavailable else None,
     })
 
 
@@ -362,6 +340,9 @@ def thesis_form(request, pk=None):
     if request.method == "POST":
         form = ThesisForm(request.POST, lecturers=lecturers)
         if form.is_valid():
+            if role == "LECTURER":
+                user = current_user(request)
+                form.cleaned_data["supervisor"] = user.get("full_name") or user["username"]
             try:
                 if pk:
                     api.theses.update(pk, form.cleaned_data)
@@ -418,18 +399,18 @@ def attach_names(registrations, students, theses):
                 r[key] = parse_datetime(r[key])
 
 
-def allowed_actions(registration, role, period):
+def allowed_actions(registration, role):
     """
     Nút nào được hiện cho đăng ký này (Registration Service vẫn kiểm tra lại mọi thao tác).
       - Duyệt   : ADMIN / GVHD, đăng ký đang chờ hoặc đã bị từ chối
       - Từ chối : ADMIN / GVHD, đăng ký đang chờ hoặc đã duyệt (bắt buộc nhập lý do)
-      - Hủy     : sinh viên khi còn CHỜ DUYỆT và đợt đang mở; ADMIN khi chờ duyệt / đã duyệt
+      - Hủy     : sinh viên khi còn CHỜ DUYỆT; ADMIN khi chờ duyệt / đã duyệt
       - Xóa hẳn : chỉ ADMIN
     """
     status = registration["status"]
     reviewer = role in ("ADMIN", "LECTURER")
     if role == "STUDENT":
-        can_cancel = status == "PENDING" and period is not None
+        can_cancel = status == "PENDING"
     else:
         can_cancel = role == "ADMIN" and status in ACTIVE_STATUSES
     return {
@@ -451,12 +432,11 @@ def registration_list(request):
     registrations = fetch(request, api.registrations.list, filters, default=[])
     students = fetch(request, api.students.list, default=[])
     theses = fetch(request, api.theses.list, default=[])
-    period = load_current_period(request)
 
     attach_names(registrations, students, theses)
     role = current_role(request)
     for r in registrations:
-        r.update(allowed_actions(r, role, period))
+        r.update(allowed_actions(r, role))
 
     return render(request, "portal/registration_list.html", {
         "menu": "registrations",
@@ -465,7 +445,6 @@ def registration_list(request):
         "theses": theses,
         "filters": filters,
         "statuses": STATUS_LABELS,
-        "period": period,
     })
 
 
@@ -488,8 +467,7 @@ def registration_detail(request, pk):
             pass
     attach_names([registration], students, [])
     role = current_role(request)
-    period = load_current_period(request)
-    registration.update(allowed_actions(registration, role, period))
+    registration.update(allowed_actions(registration, role))
 
     notes = fetch(request, api.list_notes, pk, default=[])
     for n in notes:
@@ -577,77 +555,7 @@ def registration_delete(request, pk):
     return redirect("registration_list")
 
 
-# ---------------------------------------------------------------- Đợt đăng ký (chỉ ADMIN)
-@role_required(QUAN_TRI)
-def period_list(request):
-    periods = fetch(request, api.periods.list, default=[])
-    for p in periods:
-        p["start_at"] = parse_datetime(p["start_at"])
-        p["end_at"] = parse_datetime(p["end_at"])
-    return render(request, "portal/period_list.html", {"menu": "periods", "periods": periods})
-
-
-@role_required(QUAN_TRI)
-def period_form(request, pk=None):
-    initial = None
-    if pk:
-        try:
-            initial = api.periods.get(pk)
-        except (NotFound, ServiceUnavailable):
-            messages.error(request, "Không tải được đợt đăng ký.")
-            return redirect("period_list")
-        for key in ("start_at", "end_at"):
-            initial[key] = timezone.localtime(parse_datetime(initial[key]))
-
-    form = PeriodForm(request.POST or None, initial=initial)
-    if request.method == "POST" and form.is_valid():
-        try:
-            if pk:
-                api.periods.update(pk, form.to_api())
-                messages.success(request, "Đã cập nhật đợt đăng ký.")
-            else:
-                api.periods.create(form.to_api())
-                messages.success(request, "Đã tạo đợt đăng ký.")
-            return redirect("period_list")
-        except ApiError as exc:
-            form.add_api_errors(exc.data)
-        except ServiceUnavailable as exc:
-            form.add_error(None, translate_error(str(exc)))
-    return render(request, "portal/period_form.html", {"menu": "periods", "form": form, "is_edit": bool(pk)})
-
-
-@require_POST
-@role_required(QUAN_TRI)
-def period_toggle(request, pk):
-    activate = request.POST.get("is_active") == "true"
-    try:
-        api.periods.update(pk, {"is_active": activate})
-        messages.success(request, "Đã kích hoạt đợt đăng ký." if activate else "Đã tắt đợt đăng ký.")
-    except ApiError as exc:
-        messages.error(request, api_error_message(exc.data))
-    except NotFound:
-        messages.error(request, "Đợt đăng ký không tồn tại.")
-    except ServiceUnavailable as exc:
-        messages.error(request, translate_error(str(exc)))
-    return redirect("period_list")
-
-
-@require_POST
-@role_required(QUAN_TRI)
-def period_delete(request, pk):
-    try:
-        api.periods.delete(pk)
-        messages.success(request, "Đã xóa đợt đăng ký.")
-    except ApiError as exc:
-        messages.error(request, api_error_message(exc.data))  # 409: đợt đã có đăng ký
-    except NotFound:
-        messages.error(request, "Đợt đăng ký không tồn tại.")
-    except ServiceUnavailable as exc:
-        messages.error(request, translate_error(str(exc)))
-    return redirect("period_list")
-
-
-# ---------------------------------------------------------------- API Docs
+# ---------------------------------------------------------------- Tài liệu API
 @role_required(QUAN_TRI, GIANG_VIEN, SINH_VIEN)
 def api_docs(request):
     services = [

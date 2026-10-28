@@ -1,4 +1,4 @@
-"""Check installed packages against public OSV advisories without installing an audit tool."""
+"""Đối chiếu các gói đã cài với cơ sở dữ liệu lỗ hổng công khai OSV, không cần cài công cụ audit."""
 import importlib.metadata
 import json
 from pathlib import Path

@@ -55,14 +55,12 @@ Bộ mặc định có:
 | Loại | Tài khoản/mã | Mục đích |
 |---|---|---|
 | Giảng viên 1 | `demo.soa.gv1` | Hướng dẫn đề tài 1 và 3 |
-| Giảng viên 2 | `demo.soa.gv2` | Hướng dẫn đề tài 2; có thể được phân công chấm cùng GV1 |
+| Giảng viên 2 | `demo.soa.gv2` | Hướng dẫn và chấm trực tiếp đề tài 2 |
 | Sinh viên | `demo.soa.sv1`, `demo.soa.sv2`, `demo.soa.sv3` | Kiểm tra tự đăng ký và giới hạn |
 | Sinh viên | `DEMO_SOA_SV1`, `DEMO_SOA_SV2`, `DEMO_SOA_SV3` | Mỗi tài khoản được gắn với ID thật, không giả định ID 1/2/3 |
 | Đề tài mở 1 | `DEMO_SOA_DT1` | Tối đa 1 sinh viên, GV1 phụ trách |
 | Đề tài mở 2 | `DEMO_SOA_DT2` | Tối đa 1 sinh viên, GV2 phụ trách |
 | Đề tài đóng | `DEMO_SOA_DT3` | Kiểm tra từ chối đăng ký đề tài đóng |
-| Đợt đăng ký | `Đợt đăng ký demo SOA [soa]` | Mở 30 ngày khi được tạo |
-| Đợt chấm | `Đợt chấm demo SOA [soa]` | Mở 30 ngày, tiêu chí 40/30/20/10 |
 
 Mật khẩu của các tài khoản demo mới: `Demo@2026_SOA!`. Chỉ dùng dữ liệu giả.
 
@@ -115,14 +113,14 @@ Trước khi dừng Student, ghi lại ID của DEMO_SOA_SV3 và DEMO_SOA_DT2 t�
 
 Nếu tắt Identity: phải đăng nhập trước, giữ access token còn hạn. Trong offline, thử Dashboard/Sinh viên hoặc API nghiệp vụ; tránh thao tác đăng nhập/đổi mật khẩu vì chính chúng cần Identity. Trong online, backend trả 503 và Portal hiển thị thông báo lỗi. Trang API Docs chỉ kiểm tra /api/schema/ phản hồi HTTP 200; không chứng minh SQL Server hoạt động.
 
-### F. Chấm điểm có kiểm soát
+### F. Chấm điểm trực tiếp
 
-1. Admin vào Chấm điểm, tạo hồ sơ cho đăng ký của `demo.soa.sv1` đã APPROVED, chọn đợt chấm demo.
-2. Phân công cả `demo.soa.gv1` và `demo.soa.gv2`.
-3. GV1 nhập 8/7/9/10 theo các trọng số 40/30/20/10, lưu nháp rồi nộp: tổng 8.10.
-4. GV2 nhập 9 cho bốn tiêu chí rồi nộp: điểm cuối 8.55.
-5. Trước công bố, sinh viên chưa thấy hồ sơ; Admin công bố xong thì sinh viên thấy điểm.
-6. Admin mở lại kèm lý do: kết quả ẩn khỏi sinh viên, giảng viên nộp lại, lịch sử cũ vẫn giữ.
+1. Đảm bảo đăng ký của `demo.soa.sv1` đã APPROVED.
+2. Đăng nhập `demo.soa.gv1`, mở **Chấm điểm**, bấm **Chấm điểm** ở dòng sinh viên này.
+3. Nhập **8.5**, nhận xét rồi **Lưu điểm**. Không có đợt/tiêu chí/phân công/công bố.
+4. Đăng nhập sinh viên: **Điểm của tôi** hiển thị **8.50** ngay.
+5. GV1 sửa thành **9.25**; điểm mới cập nhật, hệ thống giữ lịch sử.
+6. GV2 không có quyền chấm đề tài của GV1. Admin xem chi tiết, nhập/sửa và xóa điểm trên danh sách.
 
 ## 5. Kiểm thử trước buổi demo
 
@@ -137,7 +135,7 @@ Nếu tắt Identity: phải đăng nhập trước, giữ access token còn h�
 # Kiểm thử đúng backend SQL Server, database test tên ngẫu nhiên riêng
 .\.venv\Scripts\python.exe -B scripts\test_all.py --sql-server
 
-# Tranh chỗ cuối cùng: cần 4 API thật đang chạy và một đợt đăng ký mở
+# Tranh chỗ cuối cùng: cần 4 API thật đang chạy, đã áp dụng migration mới
 .\.venv\Scripts\python.exe -B registration-service\scripts\concurrency_test.py --students 10
 ```
 
@@ -161,13 +159,13 @@ Không sử dụng mật khẩu demo/dữ liệu thật và không công khai c�
 | Dữ liệu demo | Script REST tạo bộ riêng theo tag, dùng ID thực tế; chạy lại giữ mật khẩu và dữ liệu đã có |
 | SQL Server | Đã thử kiểm tra nhưng môi trường Codex vẫn không kết nối được; chưa áp dụng migration và chưa xác nhận khóa SQL Server thật |
 
-Bộ test sau cập nhật tự sinh mã: **325 test, 323 thực thi đạt và 2 test đồng thời SQL Server được bỏ qua trên SQLite**. Gồm Student 50, Thesis 53, Registration/Grading 94, Identity 44, Portal 84. Hai test SQL bổ sung cần chạy trên SQL Server thật.
+Số kiểm thử hiện tại được ghi trong `work/sqlite-test-result.json`; hai kiểm thử cấp mã đồng thời cần SQL Server thật.
 
 Hai lượt tích hợp HTTP qua năm tiến trình đã đạt:
 
 - Offline: Identity tắt nhưng token còn hạn vẫn gọi API nghiệp vụ được; đăng xuất/khóa ở Identity không được diễn giải là thu hồi tức thời tại các service offline.
 - Online: token bị thu hồi bị chặn; Identity tắt thì backend phụ thuộc trả 503.
-- Cả hai: đăng ký/duyệt/chấm/công bố/phúc khảo, CSRF, lỗi Student và tạo dữ liệu demo lặp lại đều được kiểm tra.
+- Cả hai: đăng ký/duyệt/nhập và sửa điểm trực tiếp, CSRF, lỗi Student và tạo dữ liệu demo lặp lại đều được kiểm tra.
 - Bộ chuẩn bị dữ liệu được chạy hai lần trên database thử riêng; mật khẩu demo đã đổi vẫn được giữ và tài khoản sinh viên gắn với ID thật.
 
 OpenAPI Registration được validate không cảnh báo; không có migration mới bị thiếu; `git diff --check` đạt. Đã kiểm tra cú pháp Python và nhánh từ chối tham số sai của launcher; không khởi động các service thật của người dùng trong lần sửa này.

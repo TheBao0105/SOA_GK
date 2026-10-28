@@ -1,6 +1,5 @@
-"""Create a separate, repeatable demo dataset via REST; never reset existing passwords or delete records."""
+"""Tạo bộ dữ liệu demo riêng qua REST, chạy lại nhiều lần được; không đặt lại mật khẩu cũ, không xóa bản ghi."""
 import argparse
-from datetime import datetime,timedelta,timezone
 import getpass
 import json
 import os
@@ -13,10 +12,7 @@ import requests
 
 ROOT=Path(__file__).resolve().parents[1]
 DEMO_PASSWORD="Demo@2026_SOA!"
-CRITERIA=[{"code":"completion","name":"Hoàn thành và chức năng","weight":40},
-          {"code":"engineering","name":"Kiến trúc và kỹ thuật","weight":30},
-          {"code":"documentation","name":"Báo cáo và kiểm thử","weight":20},
-          {"code":"presentation","name":"Trình bày","weight":10}]
+
 
 
 class DemoError(Exception):
@@ -34,7 +30,7 @@ class DemoApi:
         except requests.RequestException as exc:
             raise DemoError(f"{service} không phản hồi; hãy khởi động đủ service.") from exc
         if response.status_code not in expected:
-            # Never print complete authentication responses or bearer tokens.
+            # Không bao giờ in toàn bộ phản hồi đăng nhập hay bearer token.
             raise DemoError(f"{service} {method} {path}: HTTP {response.status_code}; xem log service để biết chi tiết.")
         try:
             data=response.json()
@@ -57,7 +53,6 @@ class DemoApi:
 
 
 def prepare(api,tag):
-    now=datetime.now(timezone.utc)
     report={'tag':tag,'accounts':[],'students':[],'theses':[],'warnings':[]}
     def account(username,role,full_name,student_id=None):
         user,created=api.ensure('identity','/api/users/','username',username,
@@ -85,24 +80,11 @@ def prepare(api,tag):
         report['theses'].append({'id':topic['id'],'thesis_code':code,'status':topic['status'],'max_students':topic['max_students'],'supervisor_id':topic.get('supervisor_id')})
         if topic.get('supervisor_id')!=lecturer['id'] or topic.get('status')!=status or topic.get('max_students')!=1:
             report['warnings'].append(f"{code} đã thay đổi qua demo; dữ liệu được giữ nguyên. Dùng --tag khác để có bộ mới.")
-    period_data={'name':f'Đợt đăng ký demo SOA [{tag}]','start_at':(now-timedelta(seconds=1)).isoformat(),
-                 'end_at':(now+timedelta(days=30)).isoformat(),'is_active':True,'max_active_per_student':1}
-    period,_=api.ensure('registration','/api/periods/','name',period_data['name'],period_data)
-    report['registration_period']={'id':period['id'],'name':period['name'],'is_open':period.get('is_open')}
-    if not period.get('is_open'):
-        report['warnings'].append('Đợt đăng ký demo đã đóng; mở lại trên giao diện hoặc dùng --tag khác.')
-    grade_data={k:v for k,v in period_data.items() if k!='max_active_per_student'}
-    grade_data.update(name=f'Đợt chấm demo SOA [{tag}]',criteria=CRITERIA)
-    grade,_=api.ensure('registration','/api/grading/periods/','name',grade_data['name'],grade_data)
-    report['grading_period']={'id':grade['id'],'name':grade['name'],'is_open':grade.get('is_open')}
-    if not grade.get('is_open'):
-        report['warnings'].append('Đợt chấm demo đã đóng; mở lại trên giao diện hoặc dùng --tag khác.')
-    # No registration, mark or publication is reset. Those steps are shown manually during the demo.
     return report
 
 
 def main():
-    # Windows redirected consoles may otherwise use an encoding that cannot print Vietnamese.
+    # Console Windows khi chuyển hướng output có thể dùng bảng mã không in được tiếng Việt.
     for stream in (sys.stdout,sys.stderr):
         if hasattr(stream,'reconfigure'):
             stream.reconfigure(encoding='utf-8')

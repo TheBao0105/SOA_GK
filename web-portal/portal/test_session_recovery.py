@@ -80,20 +80,6 @@ class SessionRecoveryTests(SimpleTestCase):
                 other='total_theses' if service=='8001' else 'total_students'
                 self.assertIsNotNone(response.context[other])
 
-    def test_period_denial_preserves_counts_and_session(self):
-        with patch('portal.api_client.requests.request',side_effect=fixtures.fake_request):
-            self.client.post('/dang-nhap/',{'username':'admin','password':'x'})
-        def remote(method,url,**kwargs):
-            if '/periods/current/' in url:
-                return fixtures.make_response(403,{'detail':'Denied'})
-            return fixtures.fake_request(method,url,**kwargs)
-        with patch('portal.api_client.requests.request',side_effect=remote):
-            response=self.client.get('/')
-        self.assertEqual(response.status_code,200)
-        self.assertIsNotNone(response.context['total_registrations'])
-        self.assertIsNone(response.context['period'])
-        self.assertFalse(response.context['show_period'])
-        self.assertIsNotNone(self.client.session.get('access_token'))
 
     def test_first_visit_always_shows_login_without_backend_calls(self):
         self.client.cookies.clear()

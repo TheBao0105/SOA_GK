@@ -36,7 +36,7 @@ SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "3600" if not DEBUG e
 SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv("SECURE_HSTS_INCLUDE_SUBDOMAINS", "False") == "True"
 SECURE_HSTS_PRELOAD = os.getenv("SECURE_HSTS_PRELOAD", "False") == "True"
 CSRF_TRUSTED_ORIGINS = [v.strip() for v in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if v.strip()]
-# Enable only behind a trusted reverse proxy that strips client-supplied forwarded headers.
+# Chỉ bật khi chạy sau reverse proxy tin cậy (proxy xóa header X-Forwarded do client tự gửi).
 if os.getenv("TRUST_PROXY_HEADERS", "False") == "True":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -119,7 +119,7 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "config.exceptions.api_exception_handler",
 }
 
-# Swagger (drf-spectacular)
+# Tài liệu API Swagger (drf-spectacular)
 SPECTACULAR_SETTINGS = {
     "TITLE": "Registration Service API",
     "DESCRIPTION": "Dịch vụ quản lý ĐĂNG KÝ đề tài (SOA demo - port 8003). Gọi Student Service và Thesis Service qua HTTP/REST.",
@@ -138,7 +138,7 @@ THESIS_SERVICE_URL = os.getenv("THESIS_SERVICE_URL", "http://127.0.0.1:8002")
 # Timeout (giây) cho mỗi HTTP request gọi sang service khác
 EXTERNAL_API_TIMEOUT = float(os.getenv("EXTERNAL_API_TIMEOUT", "5"))
 
-# ----------------------------------------------------------------- JWT
+# ----------------------------------------------------------------- Xác thực JWT
 # Chỉ cần KHÓA CÔNG KHAI của Identity Service để xác minh token (không cần khóa bí mật)
 JWT_ALGORITHM = "RS256"
 JWT_ISSUER = os.getenv("JWT_ISSUER", "identity-service")

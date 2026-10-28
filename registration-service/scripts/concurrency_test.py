@@ -8,7 +8,7 @@ Cách làm:
   4. Kết quả đúng: đúng 1 request 201, còn lại 400 "Thesis has reached maximum students".
   5. Dọn dẹp: xóa đăng ký, đề tài và sinh viên tạm.
 
-Cần chạy đủ 4 service 8001-8004 (với SQL Server thật) và có đợt đăng ký đang mở.
+Cần chạy đủ 4 service 8001-8004 (với SQL Server thật) với các migration mới nhất.
 Chạy từ thư mục gốc SOA_GK, đã activate venv:
 
     python registration-service\\scripts\\concurrency_test.py
@@ -49,10 +49,6 @@ def main():
     if login.status_code != 200:
         sys.exit(f"Đăng nhập thất bại: {login.status_code} {login.text}")
     headers = {"Authorization": f"Bearer {login.json()['access']}"}
-
-    if requests.get(f"{REGISTRATION}/api/periods/current/", headers=headers, timeout=10).status_code != 200:
-        sys.exit("Chưa có đợt đăng ký đang mở: chạy `python manage.py seed_data` ở registration-service "
-                 "hoặc tạo đợt ở trang Đợt đăng ký.")
 
     tag = uuid.uuid4().hex[:8]
     thesis = requests.post(f"{THESIS}/api/theses/", headers=headers, timeout=10, json={

@@ -1,0 +1,3 @@
+{% extends 'portal/base.html' %}
+{% block content %}<h1>Chấm điểm đề tài</h1><p><strong>{{ registration.student_name }}</strong> · {{ registration.thesis_title }}</p>
+<form method="post" class="card card-body" style="max-width:600px">{% csrf_token %}{{ form.as_p }}<p class="text-muted">Lưu điểm để sinh viên xem ngay. Có thể sửa lại khi cần; hệ thống ghi nhận lịch sử thay đổi.</p><div><a class="btn btn-secondary" href="{% url 'grade_list' %}">Quay lại</a> <button class="btn btn-primary">Lưu điểm</button></div></form>{% endblock %}

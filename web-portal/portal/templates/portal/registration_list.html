@@ -1,6 +1,6 @@
 {% extends "portal/base.html" %}
 
-{% block title %}Đăng ký{% endblock %}
+{% block title %}Quản lý Đăng ký{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -8,7 +8,6 @@
     {% if current_user.is_admin or current_user.is_student %}<a href="{% url 'registration_create' %}" class="btn btn-primary">Đăng ký đề tài</a>{% endif %}
 </div>
 
-{% include "portal/_period_banner.html" %}
 
 <form method="get" class="row g-2 mb-3">
     {% if not current_user.is_student %}

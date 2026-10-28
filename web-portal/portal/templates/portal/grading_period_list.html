@@ -1,4 +1,0 @@
-{% extends 'portal/base.html' %}
-{% block content %}<div class="d-flex justify-content-between mb-3"><h1>Đợt chấm điểm</h1>{% if current_user.is_admin %}<a class="btn btn-primary" href="{% url 'grading_period_create' %}">Tạo đợt chấm</a>{% endif %}</div>
-<table class="table table-bordered bg-white"><thead><tr><th>Tên đợt</th><th>Thời gian</th><th>Trạng thái</th><th>Tiêu chí</th><th></th></tr></thead><tbody>
-{% for p in periods %}<tr><td>{{ p.name }}</td><td>{{ p.start_at }}<br>{{ p.end_at }}</td><td>{% if p.is_open %}Đang mở{% else %}Đã đóng / chưa bắt đầu{% endif %}</td><td>{% for c in p.criteria %}{{ c.name }}: {{ c.weight }}%<br>{% endfor %}</td><td>{% if current_user.is_admin %}<a href="{% url 'grading_period_edit' p.id %}">Sửa</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="5">Chưa có đợt chấm.</td></tr>{% endfor %}</tbody></table>{% endblock %}

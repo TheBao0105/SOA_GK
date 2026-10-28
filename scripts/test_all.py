@@ -1,5 +1,5 @@
-r"""Run isolated service tests without modifying runtime settings or application databases.
-Usage: .venv\Scripts\python scripts\test_all.py --sqlite
+r"""Chạy test của từng service tách biệt, không sửa cấu hình đang chạy hay database thật.
+Cách dùng: .venv\Scripts\python scripts\test_all.py --sqlite
        .venv\Scripts\python scripts\test_all.py --sql-server
 """
 import argparse

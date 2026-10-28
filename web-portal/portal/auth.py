@@ -58,7 +58,7 @@ def login_session(request, data):
 
 
 def has_valid_session(session):
-    """Validate Portal session shape; API services still verify the actual JWT."""
+    """Kiểm tra cấu trúc phiên Portal; JWT thật vẫn do các API service xác minh."""
     access = session.get(SESSION_ACCESS)
     user = session.get(SESSION_USER)
     return (
@@ -108,7 +108,7 @@ def login_url(next_path=None):
 
 
 def permission_denied_response(request, service_name=None):
-    # A permission denial does not invalidate an authenticated session.
+    # Bị từ chối quyền không làm mất phiên đăng nhập.
     logger.warning("Access denied by %s at %s; Portal session preserved",
                    service_name or "Portal role check", request.path)
     message = f"{service_name}: Bạn không có quyền truy cập chức năng này." if service_name else "Bạn không có quyền truy cập chức năng này."
@@ -134,8 +134,8 @@ class LoginRequiredMiddleware:
             valid = has_valid_session(request.session)
             auth_keys = (SESSION_ACCESS, SESSION_REFRESH, SESSION_USER, "_auth_user_id")
             if not valid and any(key in request.session for key in auth_keys):
-                # Recover cookies from the old login implementation or an incomplete session.
-                # Apply this on login URLs too, so their GET handler cannot bounce back to /.
+                # Dọn cookie của cách đăng nhập cũ hoặc phiên thiếu thông tin.
+                # Áp dụng cả ở trang đăng nhập để GET không bị chuyển ngược về /.
                 request.session.flush()
                 messages.warning(request, "Phiên đăng nhập cũ không còn hợp lệ, vui lòng đăng nhập lại.")
             if not self.is_public(request.path) and not valid:

@@ -73,8 +73,10 @@ def _refresh_tokens(session):
         )
     except requests.RequestException:
         raise ServiceUnavailable("Identity Service không hoạt động")
-    if response.status_code != 200:
+    if response.status_code in (400, 401, 403):
         return False
+    if response.status_code != 200:
+        raise ServiceUnavailable("Identity Service chưa thể làm mới phiên đăng nhập")
     data = _json(response)
     if not _valid_token_pair(data):
         raise ServiceUnavailable("Identity Service trả dữ liệu token không hợp lệ")
@@ -171,17 +173,7 @@ def add_note(pk, data):
     return call("Registration Service", "POST", f"{registrations.url}{pk}/notes/", json=data)
 
 
-periods = Resource("Registration Service", settings.REGISTRATION_SERVICE_URL, "/api/periods/")
-
-
-def current_period():
-    """Đợt đăng ký đang mở, hoặc None nếu không có đợt nào mở."""
-    try:
-        return call("Registration Service", "GET", f"{periods.url}current/")
-    except NotFound:
-        return None
-
-# ---------------------------------------------------------------- Identity Service
+# ---------------------------------------------------------------- Dịch vụ Identity
 IDENTITY = "Identity Service"
 
 
@@ -233,16 +225,7 @@ def is_online(base_url):
         return False
 
 # Chấm điểm thuộc Registration Service, giữ nguyên cổng và cấu hình SOA.
-grading_periods = Resource("Registration Service", settings.REGISTRATION_SERVICE_URL, "/api/grading/periods/")
-assessments = Resource("Registration Service", settings.REGISTRATION_SERVICE_URL, "/api/grading/assessments/")
-
-
-def grading_action(pk, action, data=None):
-    return call("Registration Service", "POST", f"{assessments.url}{pk}/{action}/", json=data or {})
-
-
-def grading_history(pk):
-    return call("Registration Service", "GET", f"{assessments.url}{pk}/history/")
+grades = Resource("Registration Service", settings.REGISTRATION_SERVICE_URL, "/api/grading/grades/")
 
 
 def my_profile(data=None):
@@ -251,3 +234,7 @@ def my_profile(data=None):
 
 def audit_logs():
     return call(IDENTITY, "GET", f"{settings.IDENTITY_SERVICE_URL}/api/audit-logs/")
+
+
+def grade_history(pk):
+    return call("Registration Service", "GET", f"{grades.url}{pk}/history/")

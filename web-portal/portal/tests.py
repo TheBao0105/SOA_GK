@@ -17,9 +17,6 @@ NOTES = [{"id": 1, "registration": 1, "author_id": 2, "author_name": "TS. Tuấn
 REGISTRATIONS = [{"id": 1, "student_id": 1, "thesis_id": 1,
                   "registered_at": "2026-10-04T10:00:00+07:00", "status": "PENDING"}]
 
-PERIOD = {"id": 1, "name": "Đợt 1 - HK1 2026-2027", "start_at": "2026-10-01T00:00:00+07:00",
-          "end_at": "2026-12-01T00:00:00+07:00", "is_active": True, "max_active_per_student": 1,
-          "is_open": True, "created_at": "2026-10-01T00:00:00+07:00"}
 
 LOGIN_OK = {
     "access": "access-1", "refresh": "refresh-1", "token_type": "Bearer", "expires_in": 900,
@@ -42,10 +39,6 @@ def fake_request(method, url, timeout=None, **kwargs):
     if "/api/auth/logout/" in url:
         return make_response(200, {"detail": "Logged out."})
     if method == "GET":
-        if "/api/periods/current/" in url:
-            return make_response(200, PERIOD)
-        if "/api/periods/" in url:
-            return make_response(200, [PERIOD])
         if "/notes/" in url:
             return make_response(200, NOTES)
         if "/api/registrations/1/" in url:
@@ -183,6 +176,19 @@ class TokenRefreshTests(LoggedInTestCase):
         self.assertEqual(calls, ["Bearer access-1", "Bearer access-2"])
         self.assertEqual(mock_post.call_args.kwargs["json"], {"refresh": "refresh-1"})
         self.assertEqual(self.client.session["access_token"], "access-2")
+
+    def test_refresh_service_failure_preserves_session_and_can_recover(self):
+        for http_status in (429, 500, 502, 503):
+            with self.subTest(status=http_status), \
+                    patch("portal.api_client.requests.request", return_value=make_response(401, {})), \
+                    patch("portal.api_client.requests.post", return_value=make_response(http_status, {})):
+                response = self.client.get("/sinh-vien/")
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "Identity Service")
+            self.assertEqual(self.client.session["access_token"], "access-1")
+            self.assertEqual(self.client.session["refresh_token"], "refresh-1")
+        with patch("portal.api_client.requests.request", side_effect=fake_request):
+            self.assertContains(self.client.get("/sinh-vien/"), "Nguyễn Văn An")
 
     def test_refresh_fails_redirects_to_login(self):
         with patch("portal.api_client.requests.request",
@@ -391,10 +397,6 @@ class AdminAccountTests(RoleTestCase):
 
 
 # ---------------------------------------------------------------- Quy trình đăng ký (Giai đoạn 3)
-def no_period_fake(method, url, timeout=None, **kwargs):
-    if "/api/periods/current/" in url:
-        return make_response(404, {"error": "No registration period is open"})
-    return role_fake(method, url, timeout=timeout, **kwargs)
 
 
 def with_registrations(items):
@@ -423,9 +425,6 @@ def reg(pk, status, **extra):
 class StudentWorkflowTests(RoleTestCase):
     role, user_id, student_id = "STUDENT", 10, 1
 
-    def test_period_banner_shown(self, mock_request):
-        response = self.client.get("/dang-ky/")
-        self.assertContains(response, "Đợt 1 - HK1 2026-2027")
 
     def test_cancel_calls_cancel_endpoint(self, mock_request):
         mock_request.side_effect = None
@@ -441,11 +440,6 @@ class StudentWorkflowTests(RoleTestCase):
         self.assertRedirects(response, "/", fetch_redirect_response=False)
         mock_request.assert_not_called()
 
-    def test_no_cancel_button_when_period_closed(self, mock_request):
-        mock_request.side_effect = no_period_fake
-        response = self.client.get("/dang-ky/")
-        self.assertContains(response, "chưa có đợt đăng ký nào đang mở")
-        self.assertNotContains(response, "/dang-ky/1/huy/")
 
     def test_no_cancel_button_for_approved(self, mock_request):
         mock_request.side_effect = with_registrations([reg(1, "APPROVED")])
@@ -472,9 +466,6 @@ class StudentWorkflowTests(RoleTestCase):
         response = self.client.get("/dang-ky/1/")
         self.assertContains(response, "Đã xong chương 1")
         self.assertNotContains(response, 'name="content"')
-
-    def test_period_pages_are_admin_only(self, mock_request):
-        self.assertRedirects(self.client.get("/dot-dang-ky/"), "/", fetch_redirect_response=False)
 
 
 @patch("portal.api_client.requests.request", side_effect=role_fake)
@@ -557,42 +548,6 @@ class AdminWorkflowTests(RoleTestCase):
         mock_request.return_value = make_response(409, {"error": "Thesis has active registrations"})
         response = self.client.post("/de-tai/1/xoa/")
         self.assertRedirects(response, "/de-tai/", fetch_redirect_response=False)
-
-    def test_period_list(self, mock_request):
-        response = self.client.get("/dot-dang-ky/")
-        self.assertContains(response, "Đợt 1 - HK1 2026-2027")
-        self.assertContains(response, "Đang mở")
-
-    def test_create_period_sends_iso_datetimes(self, mock_request):
-        mock_request.side_effect = lambda m, u, timeout=None, **kw: (
-            make_response(201, {"id": 2}) if m == "POST" else role_fake(m, u, timeout, **kw)
-        )
-        response = self.client.post("/dot-dang-ky/them/", {
-            "name": "Đợt 2", "start_at": "2027-01-01T08:00", "end_at": "2027-01-31T17:00",
-            "max_active_per_student": 1, "is_active": "on",
-        })
-        self.assertRedirects(response, "/dot-dang-ky/", fetch_redirect_response=False)
-        data = [c for c in mock_request.call_args_list if c.args[0] == "POST"][0].kwargs["json"]
-        self.assertEqual(data["start_at"], "2027-01-01T08:00:00+07:00")
-        self.assertTrue(data["is_active"])
-
-    def test_period_end_before_start(self, mock_request):
-        response = self.client.post("/dot-dang-ky/them/", {
-            "name": "Sai", "start_at": "2027-01-31T08:00", "end_at": "2027-01-01T08:00",
-            "max_active_per_student": 1,
-        })
-        self.assertContains(response, "Thời gian kết thúc phải sau thời gian bắt đầu.")
-
-    def test_delete_period_with_registrations(self, mock_request):
-        mock_request.side_effect = delete_conflict(
-            {"error": "This period already has registrations; deactivate it instead"})
-        response = self.client.post("/dot-dang-ky/1/xoa/", follow=True)
-        self.assertContains(response, "Đợt này đã có đăng ký")
-
-    def test_edit_period_form_prefilled(self, mock_request):
-        mock_request.side_effect = lambda m, u, timeout=None, **kw: make_response(200, PERIOD)
-        response = self.client.get("/dot-dang-ky/1/sua/")
-        self.assertContains(response, 'value="2026-10-01T00:00"')
 
 
 class ActiveCountTests(SimpleTestCase):

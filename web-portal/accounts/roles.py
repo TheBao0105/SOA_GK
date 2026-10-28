@@ -1,4 +1,4 @@
-"""Vietnamese aliases for canonical roles issued by Identity Service."""
+"""Tên tiếng Việt cho các vai trò chuẩn do Identity Service cấp."""
 QUAN_TRI = "ADMIN"
 GIANG_VIEN = "LECTURER"
 SINH_VIEN = "STUDENT"

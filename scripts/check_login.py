@@ -1,4 +1,4 @@
-"""Read-only login and cross-service access diagnosis. Never logs passwords/tokens."""
+"""Chẩn đoán đăng nhập và truy cập liên service (chỉ đọc). Không bao giờ in mật khẩu/token."""
 import getpass
 import json
 from pathlib import Path
@@ -13,7 +13,7 @@ SERVICES = ("identity-service", "student-service", "thesis-service", "registrati
 def main():
     configurations = {}
     failed = False
-    # Import each service in its own process: Django settings must not leak between services.
+    # Import từng service trong process riêng để cấu hình Django của service này không lẫn sang service khác.
     code = """import os,json,hashlib;os.environ['DJANGO_SETTINGS_MODULE']='config.settings'
 from django.conf import settings
 from pathlib import Path
@@ -62,8 +62,7 @@ print(json.dumps({'issuer':getattr(settings,'JWT_ISSUER',None),'public_key_sha25
             endpoints = (('IDENTITY_SERVICE_URL','/api/auth/me/'),
                          ('STUDENT_SERVICE_URL','/api/students/'),
                          ('THESIS_SERVICE_URL','/api/theses/'),
-                         ('REGISTRATION_SERVICE_URL','/api/registrations/'),
-                         ('REGISTRATION_SERVICE_URL','/api/periods/current/'))
+                         ('REGISTRATION_SERVICE_URL','/api/registrations/'))
             for name, path in endpoints:
                 try:
                     response = client.get(portal[name].rstrip('/')+path, headers=headers, timeout=10, allow_redirects=False)
@@ -74,10 +73,7 @@ print(json.dumps({'issuer':getattr(settings,'JWT_ISSUER',None),'public_key_sha25
                         print('FAIL: token rejected. Check public key/issuer, system clock and online Identity URL.')
                     elif response.status_code >= 500:
                         print('FAIL: inspect this service terminal, database and Identity availability.')
-                    no_period = path == '/api/periods/current/' and response.status_code == 404
-                    if no_period:
-                        print('OK: no current registration period on this database.')
-                    failed |= response.status_code != 200 and not no_period
+                    failed |= response.status_code != 200
                 except requests.RequestException:
                     print(f'FAIL {name}: connection failed. Check URL and running process.')
                     failed = True

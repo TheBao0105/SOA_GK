@@ -5,16 +5,16 @@ from .models import Student, StudentCodeSequence
 
 PREFIX = "SV"
 PATTERN = re.compile(r"SV([0-9]+)\Z", re.IGNORECASE)
-MAX_NUMBER = 10 ** 18 - 1  # prefix + 18 digits fits the existing 20-character field
+MAX_NUMBER = 10 ** 18 - 1  # tiền tố + 18 chữ số vừa với cột dài 20 ký tự hiện có
 
 
 @transaction.atomic
 def create_with_code(validated_data):
-    # The singleton is created by the migration, so no lazy-insert race is needed.
+    # Dòng bộ đếm duy nhất đã được migration tạo sẵn, nên không có tranh chấp khi chèn dòng lần đầu.
     counter = StudentCodeSequence.objects.select_for_update().get(pk=1)
     data = dict(validated_data)
     if not data.get("student_code"):
-        # Reconcile codes imported/seeded by older code. This small demo uses a simple scan.
+        # Đối chiếu với các mã đã nhập tay/seed từ phiên bản cũ. Dữ liệu demo nhỏ nên quét đơn giản là đủ.
         highest = counter.value
         for code in Student.objects.filter(student_code__startswith=PREFIX).values_list("student_code", flat=True).iterator():
             match = PATTERN.fullmatch(code)
@@ -25,7 +25,7 @@ def create_with_code(validated_data):
         counter.value = highest + 1
         data["student_code"] = f"{PREFIX}{counter.value:03d}"
     else:
-        # Explicit codes remain supported for existing seed/import/API clients.
+        # Vẫn cho phép truyền mã cụ thể để tương thích seed/import/API client cũ.
         if Student.objects.filter(student_code=data["student_code"]).exists():
             raise serializers.ValidationError({"student_code": "Mã đã tồn tại."})
         match = PATTERN.fullmatch(data["student_code"])

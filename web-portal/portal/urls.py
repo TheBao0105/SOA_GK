@@ -1,17 +1,15 @@
 from django.urls import path
 
-from . import views, grading_views
+from . import views, grading_views, account_views
 
 urlpatterns = [
-    path("tai-khoan/<int:pk>/sua/", grading_views.account_edit, name="account_edit"),
-    path("cham-diem/", grading_views.assessment_list, name="assessment_list"),
-    path("cham-diem/them/", grading_views.assessment_create, name="assessment_create"),
-    path("cham-diem/<int:pk>/", grading_views.assessment_detail, name="assessment_detail"),
-    path("dot-cham-diem/", grading_views.grading_period_list, name="grading_period_list"),
-    path("dot-cham-diem/them/", grading_views.grading_period_form, name="grading_period_create"),
-    path("dot-cham-diem/<int:pk>/sua/", grading_views.grading_period_form, name="grading_period_edit"),
-    path("ho-so/", grading_views.profile, name="profile"),
-    path("nhat-ky/", grading_views.audit_log_list, name="audit_log_list"),
+    path("cham-diem/", grading_views.grade_list, name="grade_list"),
+    path("cham-diem/<int:pk>/chi-tiet/", grading_views.grade_detail, name="grade_detail"),
+    path("cham-diem/<int:pk>/xoa/", grading_views.grade_delete, name="grade_delete"),
+    path("cham-diem/<int:pk>/", grading_views.grade_edit, name="grade_edit"),
+    path("tai-khoan/<int:pk>/sua/", account_views.account_edit, name="account_edit"),
+    path("ho-so/", account_views.profile, name="profile"),
+    path("nhat-ky/", account_views.audit_log_list, name="audit_log_list"),
     path("dang-nhap/", views.login_view, name="login"),
     path("dang-xuat/", views.logout_view, name="logout"),
     path("doi-mat-khau/", views.change_password_view, name="change_password"),
@@ -61,12 +59,6 @@ urlpatterns = [
     # URL: /dang-ky/<pk>/huy/ - hủy đăng ký (giữ lịch sử, trạng thái CANCELLED)
     path("dang-ky/<int:pk>/huy/", views.registration_cancel, name="registration_cancel"),
 
-    # Đợt đăng ký (chỉ ADMIN) - gọi /api/periods/ của Registration Service
-    path("dot-dang-ky/", views.period_list, name="period_list"),
-    path("dot-dang-ky/them/", views.period_form, name="period_create"),
-    path("dot-dang-ky/<int:pk>/sua/", views.period_form, name="period_edit"),
-    path("dot-dang-ky/<int:pk>/trang-thai/", views.period_toggle, name="period_toggle"),
-    path("dot-dang-ky/<int:pk>/xoa/", views.period_delete, name="period_delete"),
 
     # Quản lý tài khoản (chỉ ADMIN) - gọi API của Identity Service
     path("tai-khoan/", views.account_list, name="account_list"),

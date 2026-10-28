@@ -1,220 +1,159 @@
-from datetime import timedelta
-from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import requests
-from django.utils import timezone
 from config.testing import AuthenticatedAPITestCase
 from registrations.models import Registration
-from .models import Assessment, GradeEvent, GradingAssignment, GradingPeriod
+from .models import Grade, GradeHistory
 
-CRITERIA = [{"code": "work", "name": "Chức năng", "weight": "40"}, {"code": "design", "name": "Kỹ thuật", "weight": "30"}, {"code": "report", "name": "Báo cáo", "weight": "20"}, {"code": "defense", "name": "Bảo vệ", "weight": "10"}]
-BASE = "/api/grading/"
+BASE = "/api/grading/grades/"
 
 
-class GradingTests(AuthenticatedAPITestCase):
+def theses(url, headers=None, timeout=None):
+    from registrations.tests import make_response
+    return make_response(200, [{"id":1}])
+
+
+@patch("registrations.services.external_api.requests.get", side_effect=theses)
+class DirectGradeTests(AuthenticatedAPITestCase):
     def setUp(self):
         super().setUp()
-        now = timezone.now()
-        self.period = GradingPeriod.objects.create(name="Đợt test", start_at=now-timedelta(days=1), end_at=now+timedelta(days=1), criteria=CRITERIA)
         self.reg = Registration.objects.create(student_id=1, thesis_id=1, status="APPROVED")
-        self.assessment = Assessment.objects.create(registration=self.reg, period=self.period, created_by=1)
-        self.url = f"{BASE}assessments/{self.assessment.pk}/"
-        self.mark = GradingAssignment.objects.create(assessment=self.assessment, lecturer_id=2, lecturer_name="GV 2")
+        self.other = Registration.objects.create(student_id=2, thesis_id=2, status="APPROVED")
 
-    def score(self, value="8", submit=True):
-        return self.client.post(self.url+"scores/", {"scores": {c["code"]: value for c in CRITERIA}, "comment": "Nhận xét", "submit": submit}, format="json")
+    def score(self, value="8.5", registration=None, comment="Tốt"):
+        return self.client.post(BASE, {"registration":registration or self.reg.pk,"score":value,"comment":comment},format="json")
 
-    def submitted(self):
-        self.login_as("LECTURER", user_id=2)
-        self.assertEqual(self.score().status_code, 200)
+    def lecturer(self):
+        self.login_as("LECTURER", user_id=2, full_name="GV hướng dẫn")
+
+    def test_lecturer_enters_score_directly_and_student_sees_it_immediately(self, remote):
+        self.lecturer()
+        response = self.score()
+        self.assertEqual(response.status_code,201)
+        self.assertEqual(response.data["score"],"8.50")
+        self.assertEqual(response.data["lecturer_id"],2)
+        self.login_as("STUDENT",user_id=5,student_id=1)
+        rows=self.client.get(BASE).data
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]["score"],"8.50")
+
+    def test_score_update_reuses_record_and_records_before_after(self, remote):
+        self.lecturer()
+        first=self.score("0")
+        second=self.score("10",comment="Sửa lại")
+        self.assertEqual(second.status_code,200)
+        self.assertEqual(first.data["id"],second.data["id"])
+        self.assertEqual(Grade.objects.count(),1)
+        self.assertEqual(GradeHistory.objects.count(),2)
+        event=GradeHistory.objects.first()
+        self.assertEqual(event.detail["before"]["score"],"0.00")
+        self.assertEqual(event.detail["after"]["score"],"10.00")
+
+    def test_invalid_scores_do_not_write(self, remote):
+        self.lecturer()
+        for value in ("-1","10.01","NaN","Infinity","1.001","",None,True):
+            with self.subTest(value=value):
+                self.assertEqual(self.score(value).status_code,400)
+        self.assertEqual(Grade.objects.count(),0)
+        self.assertEqual(GradeHistory.objects.count(),0)
+
+    def test_other_lecturer_thesis_cannot_be_graded(self, remote):
+        self.lecturer()
+        self.assertEqual(self.score(registration=self.other.pk).status_code,404)
+        self.assertEqual(Grade.objects.count(),0)
+        self.assertIn("supervisor_id=2",remote.call_args.args[0])
+        self.assertIn("Authorization",remote.call_args.kwargs["headers"])
+
+    def test_only_approved_registration_can_be_graded(self, remote):
+        self.lecturer()
+        for state in ("PENDING","REJECTED","CANCELLED"):
+            self.reg.status=state
+            self.reg.save()
+            self.assertEqual(self.score().status_code,400)
+        self.assertEqual(Grade.objects.count(),0)
+
+    def test_student_service_cannot_write(self, remote):
+        for role in ("STUDENT","SERVICE"):
+            self.login_as(role,student_id=1 if role=="STUDENT" else None)
+            self.assertEqual(self.score().status_code,403)
+        self.assertEqual(Grade.objects.count(),0)
+
+    def test_read_scope_and_history_permissions(self, remote):
+        self.lecturer()
+        grade=self.score().data
+        other=Grade.objects.create(registration=self.other,score="9",lecturer_id=3)
+        self.assertEqual([g["id"] for g in self.client.get(BASE).data],[grade["id"]])
+        self.assertEqual(self.client.get(f"{BASE}{other.pk}/").status_code,404)
+        self.assertEqual(self.client.get(f"{BASE}{grade['id']}/history/").status_code,200)
+        self.login_as("STUDENT",user_id=6,student_id=2)
+        self.assertEqual([g["id"] for g in self.client.get(BASE).data],[other.pk])
+        self.assertEqual(self.client.get(f"{BASE}{grade['id']}/").status_code,404)
+        self.assertEqual(self.client.get(f"{BASE}{other.pk}/history/").status_code,403)
         self.login_as("ADMIN")
+        self.assertEqual(len(self.client.get(BASE).data),2)
 
-    def test_authentication_required(self):
+    def test_authentication_required(self, remote):
         self.client.credentials()
-        self.assertEqual(self.client.get(BASE+"assessments/").status_code, 401)
-        self.assertEqual(self.client.post(BASE+"periods/", {}, format="json").status_code, 401)
+        self.assertEqual(self.client.get(BASE).status_code,401)
+        self.assertEqual(self.score().status_code,401)
+        remote.assert_not_called()
 
-    def test_weighted_score_uses_decimal(self):
-        self.login_as("LECTURER", user_id=2)
-        r = self.client.post(self.url+"scores/", {"scores": {"work": "8", "design": "7", "report": "9", "defense": "10"}, "submit": True}, format="json")
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(Decimal(r.data["final_score"]), Decimal("8.10"))
-        self.assertEqual(r.data["status"], "GRADED")
-
-    def test_multiple_examiners_average_and_all_must_submit(self):
-        GradingAssignment.objects.create(assessment=self.assessment, lecturer_id=3, lecturer_name="GV 3")
-        self.submitted()
-        self.assertEqual(self.client.post(self.url+"publish/").status_code, 400)
-        self.login_as("LECTURER", user_id=3)
-        r = self.score("9")
-        self.assertEqual(Decimal(r.data["final_score"]), Decimal("8.50"))
-
-    def test_draft_cannot_publish(self):
-        self.login_as("LECTURER", user_id=2)
-        r = self.score(submit=False)
-        self.assertEqual(r.data["status"], "IN_PROGRESS")
-        self.assertIsNone(r.data["final_score"])
-        self.login_as("ADMIN")
-        self.assertEqual(self.client.post(self.url+"publish/").status_code, 400)
-
-    def test_unassigned_lecturer_cannot_read_grade_or_history(self):
-        self.login_as("LECTURER", user_id=9)
-        self.assertEqual(self.client.get(self.url).status_code, 404)
-        self.assertEqual(self.score().status_code, 404)
-        self.assertEqual(self.client.get(self.url+"history/").status_code, 404)
-        self.assertEqual(self.client.get(BASE+"assessments/").data, [])
-
-    def test_admin_cannot_impersonate_examiner(self):
-        self.assertEqual(self.score().status_code, 403)
-
-    def test_student_sees_only_own_published_result(self):
-        self.login_as("STUDENT", user_id=4, student_id=1)
-        self.assertEqual(self.client.get(self.url).status_code, 404)
-        self.assertEqual(self.client.get(BASE+"assessments/").data, [])
-        self.submitted()
-        self.assertEqual(self.client.post(self.url+"publish/").status_code, 200)
-        self.login_as("STUDENT", user_id=4, student_id=1)
-        self.assertEqual(self.client.get(self.url).status_code, 200)
-        self.assertEqual(self.client.get(self.url+"history/").status_code, 403)
-        self.login_as("STUDENT", user_id=5, student_id=2)
-        self.assertEqual(self.client.get(self.url).status_code, 404)
-
-    def test_student_cannot_grade_assign_publish_or_create(self):
-        self.login_as("STUDENT", user_id=4, student_id=1)
-        for suffix in ("scores/", "assign/", "publish/", "reopen/"):
-            self.assertEqual(self.client.post(self.url+suffix, {}, format="json").status_code, 403)
-        self.assertEqual(self.client.post(BASE+"assessments/", {}).status_code, 403)
-
-    def test_lecturer_cannot_publish_reopen_assign_or_create(self):
-        self.login_as("LECTURER", user_id=2)
-        for suffix in ("assign/", "publish/", "reopen/"):
-            self.assertEqual(self.client.post(self.url+suffix, {}, format="json").status_code, 403)
-        self.assertEqual(self.client.post(BASE+"assessments/", {}).status_code, 403)
-
-    def test_scores_out_of_range_nan_unknown_and_missing_rejected(self):
-        self.login_as("LECTURER", user_id=2)
-        for value in ("-1", "10.01", "NaN", "Infinity", "1.001"):
-            self.assertEqual(self.score(value).status_code, 400)
-        for scores in ({"work": "5"}, {"unknown": "5"}):
-            self.assertEqual(self.client.post(self.url+"scores/", {"scores": scores, "submit": True}, format="json").status_code, 400)
-        self.assertEqual(GradeEvent.objects.count(), 0)
-
-    def test_submitted_score_is_locked_until_admin_reopens(self):
-        self.submitted()
-        self.login_as("LECTURER", user_id=2)
-        self.assertEqual(self.score("9").status_code, 400)
-        self.login_as("ADMIN")
-        self.assertEqual(self.client.post(self.url+"reopen/", {"reason": ""}).status_code, 400)
-        self.assertEqual(self.client.post(self.url+"reopen/", {"reason": "Sửa theo biên bản"}).status_code, 200)
-        self.login_as("LECTURER", user_id=2)
-        self.assertEqual(self.score("9").status_code, 200)
-        event = GradeEvent.objects.filter(action="SUBMITTED").first()
-        self.assertEqual(event.detail["before"]["scores"]["work"], "8.00")
-        self.assertEqual(event.detail["after"]["scores"]["work"], "9.00")
-
-    def test_published_score_locked_and_reopen_hides_result(self):
-        self.submitted()
-        self.client.post(self.url+"publish/")
-        self.login_as("LECTURER", user_id=2)
-        self.assertEqual(self.score().status_code, 400)
-        self.login_as("ADMIN")
-        self.client.post(self.url+"reopen/", {"reason": "Phúc khảo"})
-        self.assessment.refresh_from_db()
-        self.assertIsNone(self.assessment.published_at)
-        self.assertIsNone(self.assessment.final_score)
-        self.login_as("STUDENT", user_id=4, student_id=1)
-        self.assertEqual(self.client.get(self.url).status_code, 404)
-
-    def test_closed_or_disabled_period_blocks_grading(self):
-        self.login_as("LECTURER", user_id=2)
-        self.period.is_active=False
-        self.period.save()
-        self.assertEqual(self.score().status_code, 400)
-        self.period.is_active=True
-        self.period.end_at=timezone.now()-timedelta(seconds=1)
-        self.period.save()
-        self.assertEqual(self.score().status_code, 400)
-
-    def test_criteria_validated_and_frozen(self):
-        url=f"{BASE}periods/{self.period.pk}/"
-        for criteria in ([], [{"code":"x","name":"X","weight":99}], [{"code":"x","name":"X","weight":"NaN"}], [{"code":"x","name":"X","weight":50}]*2):
-            self.assertEqual(self.client.patch(url, {"criteria":criteria}, format="json").status_code, 400)
-        self.assertEqual(self.client.patch(url, {"criteria":[{"code":"new","name":"Mới","weight":100}]}, format="json").status_code, 400)
-        self.assertEqual(self.client.patch(url, {"is_active":False}, format="json").status_code, 200)
-
-    def test_period_creation_and_date_validation(self):
-        now=timezone.now()
-        body={"name":"Mới","start_at":now.isoformat(),"end_at":(now+timedelta(days=1)).isoformat(),"criteria":CRITERIA}
-        self.assertEqual(self.client.post(BASE+"periods/", body, format="json").status_code, 201)
-        body["end_at"]=now.isoformat()
-        self.assertEqual(self.client.post(BASE+"periods/", body, format="json").status_code, 400)
-        self.login_as("LECTURER",user_id=2)
-        self.assertEqual(self.client.post(BASE+"periods/", body, format="json").status_code, 403)
-
-    def test_create_requires_approved_and_unique_registration(self):
-        body={"period":self.period.pk,"registration":self.reg.pk}
-        self.assertEqual(self.client.post(BASE+"assessments/",body).status_code,400)
-        self.reg=Registration.objects.create(student_id=2,thesis_id=1,status="PENDING")
-        body["registration"]=self.reg.pk
-        self.assertEqual(self.client.post(BASE+"assessments/",body).status_code,400)
-        self.reg.status="APPROVED"
-        self.reg.save()
-        self.assertEqual(self.client.post(BASE+"assessments/",body).status_code,201)
-
-    @patch("grading.views._get_json")
-    def test_assignment_validates_identity_and_forwards_token(self, remote):
-        remote.return_value={"id":3,"role":"LECTURER","is_active":True,"full_name":"GV 3"}
-        r=self.client.post(self.url+"assign/",{"lecturer_ids":[3]},format="json")
-        self.assertEqual(r.status_code,200)
-        self.assertTrue(remote.call_args.args[2])
-        self.assertEqual(list(self.assessment.assignments.values_list("lecturer_id",flat=True)),[3])
-        remote.return_value={"id":4,"role":"STUDENT","is_active":True}
-        self.assertEqual(self.client.post(self.url+"assign/",{"lecturer_ids":[4]},format="json").status_code,400)
-        remote.return_value={"id":4,"role":"LECTURER","is_active":False}
-        self.assertEqual(self.client.post(self.url+"assign/",{"lecturer_ids":[4]},format="json").status_code,400)
-
-    @patch("registrations.services.external_api.requests.get",side_effect=requests.Timeout)
-    def test_identity_timeout_preserves_assignments(self, remote):
-        self.assertEqual(self.client.post(self.url+"assign/",{"lecturer_ids":[3]},format="json").status_code,503)
-        self.assertTrue(self.assessment.assignments.filter(lecturer_id=2).exists())
-
-    def test_registration_with_grading_cannot_cancel_delete_or_reject(self):
-        url=f"/api/registrations/{self.reg.pk}/"
-        self.assertEqual(self.client.post(url+"cancel/").status_code,409)
-        self.assertEqual(self.client.delete(url).status_code,409)
-        self.assertEqual(self.client.patch(url,{"status":"REJECTED","reject_reason":"X"}).status_code,400)
-        self.reg.refresh_from_db()
-        self.assertEqual(self.reg.status,"APPROVED")
-
-    def test_service_token_denied_and_history_immutable(self):
+    def test_service_token_cannot_read_grades(self, remote):
         self.login_as("SERVICE")
-        self.assertEqual(self.client.get(BASE+"assessments/").status_code,403)
+        self.assertEqual(self.client.get(BASE).status_code,403)
+
+    def test_upstream_outage_fails_closed_without_writing(self, remote):
+        self.lecturer()
+        remote.side_effect=requests.Timeout
+        self.assertEqual(self.score().status_code,503)
+        self.assertEqual(Grade.objects.count(),0)
+
+    def test_grade_protects_registration_against_delete_cancel_and_reject(self, remote):
+        self.lecturer()
+        self.score()
         self.login_as("ADMIN")
-        self.assertEqual(self.client.delete(self.url).status_code,403)
-        self.assertEqual(self.client.patch(self.url,{"final_score":"10"}).status_code,403)
+        url=f"/api/registrations/{self.reg.pk}/"
+        self.assertEqual(self.client.delete(url).status_code,409)
+        self.assertEqual(self.client.post(url+"cancel/").status_code,409)
+        self.assertEqual(self.client.patch(url,{"status":"REJECTED","reject_reason":"X"}).status_code,400)
 
-    def test_full_publish_workflow_records_actor_and_history(self):
-        self.submitted()
-        r=self.client.post(self.url+"publish/")
-        self.assertEqual(r.status_code,200)
-        self.assertEqual(r.data["published_by"],1)
-        self.assertIsNotNone(r.data["published_at"])
-        events=self.client.get(self.url+"history/").data
-        self.assertEqual(events[0]["action"],"PUBLISHED")
-        self.assertEqual(events[0]["detail"]["final_score"],"8.00")
+    def test_old_workflow_is_removed(self, remote):
+        for path in ("/api/grading/periods/","/api/grading/assessments/"):
+            self.assertEqual(self.client.get(path).status_code,404)
+        self.assertEqual(self.client.get('/api/schema/?format=json').status_code,200)
 
+    def test_cannot_patch_grade_to_bypass_validated_save_flow(self, remote):
+        self.lecturer()
+        grade=self.score().data
+        url=f"{BASE}{grade['id']}/"
+        self.assertEqual(self.client.patch(url,{"score":"10"}).status_code,403)
 
-    def test_equivalent_weight_format_does_not_block_period_date_edit(self):
-        criteria=[{**c,"weight":c["weight"]+".00"} for c in CRITERIA]
-        response=self.client.patch(f"{BASE}periods/{self.period.pk}/",{"criteria":criteria,"end_at":(timezone.now()+timedelta(days=2)).isoformat()},format="json")
-        self.assertEqual(response.status_code,200)
-        self.assertEqual(response.data["criteria"][0]["weight"],"40")
+    def test_admin_can_create_edit_delete_and_regrade_with_history(self, remote):
+        first=self.score()
+        self.assertEqual(first.status_code,201)
+        pk=first.data['id']
+        self.assertEqual(self.score('9').status_code,200)
+        self.assertEqual(self.client.delete(f'{BASE}{pk}/').status_code,204)
+        self.assertEqual(Grade.objects.count(),0)
+        self.assertEqual(GradeHistory.objects.filter(action='DELETED').count(),1)
+        self.assertEqual(GradeHistory.objects.filter(grade__isnull=False).count(),0)
+        self.assertEqual(GradeHistory.objects.filter(action='DELETED').get().detail['before']['score'],'9.00')
+        saved=self.score('7.5')
+        self.assertEqual(saved.status_code,201)
+        history=self.client.get(f"{BASE}{saved.data['id']}/history/").data
+        self.assertEqual(len(history),4)
+        self.assertTrue(any(e['action']=='DELETED' for e in history))
 
+    def test_lecturer_can_delete_own_grade_but_not_another_thesis_grade(self, remote):
+        self.lecturer()
+        own=self.score().data['id']
+        other=Grade.objects.create(registration=self.other,score='9',lecturer_id=3)
+        self.assertEqual(self.client.delete(f'{BASE}{other.pk}/').status_code,404)
+        self.assertEqual(self.client.delete(f'{BASE}{own}/').status_code,204)
+        self.assertTrue(Grade.objects.filter(pk=other.pk).exists())
+        self.assertEqual(self.client.delete(f'{BASE}{own}/').status_code,404)
 
-    @patch("grading.views._get_json")
-    def test_invalid_examiner_response_cannot_change_assignments(self,remote):
-        for payload in ({},[],{"id":99,"role":"LECTURER","is_active":True},{"id":3,"role":"LECTURER","is_active":"yes"}):
-            remote.return_value=payload
-            with self.subTest(payload=payload):
-                self.assertEqual(self.client.post(self.url+"assign/",{"lecturer_ids":[3]},format="json").status_code,503)
-                self.assertTrue(self.assessment.assignments.filter(lecturer_id=2).exists())
+    def test_student_cannot_delete_even_own_grade(self, remote):
+        own=self.score().data['id']
+        self.login_as('STUDENT',user_id=5,student_id=1)
+        self.assertEqual(self.client.delete(f'{BASE}{own}/').status_code,403)
+        self.assertTrue(Grade.objects.filter(pk=own).exists())

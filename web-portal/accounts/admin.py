@@ -1,3 +1,3 @@
 from django.contrib import admin
 
-# Register your models here.
+# Đăng ký model với Django Admin tại đây (Portal không có model riêng).

@@ -1,4 +1,3 @@
-from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -6,7 +5,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 urlpatterns = [
     # Vào trang gốc "/" thì tự chuyển tới Swagger UI
     path("", RedirectView.as_view(url="/api/docs/", permanent=False)),
-    path("admin/", admin.site.urls),
+    # Ghi dữ liệu nghiệp vụ chỉ qua REST có JWT và quy tắc phân quyền, không mở Django Admin tại service này.
     # REST API của service
     path("api/", include("registrations.urls")),
     path("api/grading/", include("grading.urls")),

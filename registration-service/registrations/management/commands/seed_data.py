@@ -1,10 +1,7 @@
-from datetime import timedelta
-
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.utils import timezone
 
-from registrations.models import Registration, RegistrationPeriod
+from registrations.models import Registration
 from registrations.services import external_api
 from registrations.services.external_api import ServiceAuthError, ServiceUnavailableError
 
@@ -34,20 +31,6 @@ class Command(BaseCommand):
     )
 
     def handle(self, *args, **options):
-        # Đợt đăng ký mẫu: mở từ hôm nay, kéo dài 60 ngày (chỉ tạo nếu chưa có đợt nào)
-        period = RegistrationPeriod.objects.order_by("-start_at").first()
-        if period is None:
-            now = timezone.now()
-            period = RegistrationPeriod.objects.create(
-                name="Đợt 1 - HK1 2026-2027",
-                start_at=now - timedelta(minutes=1),
-                end_at=now + timedelta(days=60),
-                max_active_per_student=1,
-            )
-            self.stdout.write(f"Created period id={period.id}: {period.name} (mở tới {period.end_at:%d/%m/%Y})")
-        else:
-            self.stdout.write(f"Exists  period id={period.id}: {period.name} [{'mở' if period.is_open() else 'đóng'}]")
-
         if not settings.SERVICE_TOKEN:
             raise CommandError(SERVICE_TOKEN_HELP.format(reason="Chưa có SERVICE_TOKEN trong registration-service/.env"))
 
@@ -68,7 +51,7 @@ class Command(BaseCommand):
                 registration, created = Registration.objects.get_or_create(
                     student_id=student["id"],
                     thesis_id=thesis["id"],
-                    defaults={"status": reg_status, "period": period},
+                    defaults={"status": reg_status},
                 )
                 action = "Created" if created else "Exists "
                 self.stdout.write(

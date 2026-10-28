@@ -1,11 +1,11 @@
-"""Apply additive migrations using each service's existing configured database."""
+"""Áp dụng migration còn thiếu cho từng service theo database đang cấu hình của service đó."""
 import os
 from pathlib import Path
 import subprocess
 import sys
 
 root=Path(__file__).resolve().parents[1]
-# Verify every database before applying any migration; preserve all .env settings.
+# Kiểm tra mọi database trước khi áp dụng migration nào; giữ nguyên cấu hình .env.
 check=subprocess.run([sys.executable,"-B",str(root/"scripts"/"check_sql_server.py")],cwd=root)
 if check.returncode:
     sys.exit(check.returncode)

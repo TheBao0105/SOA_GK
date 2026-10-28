@@ -31,7 +31,6 @@ class ThesisForm(BootstrapForm):
     description = forms.CharField(
         label="Mô tả", required=False, widget=forms.Textarea(attrs={"rows": 3})
     )
-    supervisor = forms.CharField(label="Giảng viên hướng dẫn", max_length=100, required=False)
     max_students = forms.IntegerField(label="Số sinh viên tối đa", min_value=1, initial=1)
     status = forms.ChoiceField(
         label="Trạng thái", choices=[("OPEN", "Đang mở"), ("CLOSED", "Đã đóng")]
@@ -41,9 +40,10 @@ class ThesisForm(BootstrapForm):
         """lecturers: danh sách tài khoản giảng viên (chỉ ADMIN mới được chọn GVHD)."""
         super().__init__(*args, **kwargs)
         self.lecturers = {u["id"]: u for u in (lecturers or [])}
+        self.can_select_supervisor = lecturers is not None
         if lecturers is not None:
             self.fields["supervisor_id"] = forms.TypedChoiceField(
-                label="Tài khoản giảng viên hướng dẫn",
+                label="Giảng viên hướng dẫn",
                 coerce=int,
                 required=False,
                 empty_value=None,
@@ -55,8 +55,8 @@ class ThesisForm(BootstrapForm):
     def clean(self):
         data = super().clean()
         lecturer = self.lecturers.get(data.get("supervisor_id"))
-        if lecturer and not data.get("supervisor"):
-            data["supervisor"] = lecturer["full_name"] or lecturer["username"]
+        if self.can_select_supervisor:
+            data["supervisor"] = (lecturer["full_name"] or lecturer["username"]) if lecturer else ""
         return data
 
 
@@ -97,36 +97,6 @@ class RejectForm(BootstrapForm):
 class ProgressNoteForm(BootstrapForm):
     content = forms.CharField(label="Nhận xét / tiến độ", widget=forms.Textarea(attrs={"rows": 3}))
     progress = forms.IntegerField(label="Hoàn thành (%)", min_value=0, max_value=100, required=False)
-
-
-class PeriodForm(BootstrapForm):
-    """Đợt đăng ký (ADMIN). Thời gian nhập theo giờ Việt Nam (TIME_ZONE của Portal)."""
-
-    DATETIME_INPUT = forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M")
-
-    name = forms.CharField(label="Tên đợt", max_length=100)
-    start_at = forms.DateTimeField(label="Bắt đầu", widget=DATETIME_INPUT, input_formats=["%Y-%m-%dT%H:%M"])
-    end_at = forms.DateTimeField(label="Kết thúc", widget=DATETIME_INPUT, input_formats=["%Y-%m-%dT%H:%M"])
-    max_active_per_student = forms.IntegerField(
-        label="Số đăng ký còn hiệu lực tối đa / sinh viên", min_value=1, initial=1
-    )
-    is_active = forms.BooleanField(label="Kích hoạt", required=False, initial=True)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["is_active"].widget.attrs["class"] = "form-check-input"
-
-    def clean(self):
-        data = super().clean()
-        if data.get("start_at") and data.get("end_at") and data["end_at"] <= data["start_at"]:
-            self.add_error("end_at", "Thời gian kết thúc phải sau thời gian bắt đầu.")
-        return data
-
-    def to_api(self):
-        data = dict(self.cleaned_data)
-        data["start_at"] = data["start_at"].isoformat()
-        data["end_at"] = data["end_at"].isoformat()
-        return data
 
 
 ROLE_CHOICES = [("STUDENT", "Sinh viên"), ("LECTURER", "Giảng viên"), ("ADMIN", "Quản trị")]
@@ -214,16 +184,12 @@ ERROR_MESSAGES = {
     "Registration Service không hoạt động": "Registration Service không hoạt động.",
     "Registration Service unavailable": "Registration Service không hoạt động, chưa thể kiểm tra đăng ký liên quan.",
     # Giai đoạn 3: quy trình đăng ký
-    "Registration period is closed": "Hiện không có đợt đăng ký nào đang mở.",
-    "No registration period is open": "Hiện không có đợt đăng ký nào đang mở.",
     "Student already has an active registration": "Sinh viên đã có đăng ký đang chờ duyệt hoặc đã được duyệt.",
     "Registration is already cancelled": "Đăng ký này đã được hủy trước đó.",
     "Only pending or approved registrations can be cancelled": "Chỉ hủy được đăng ký đang chờ duyệt hoặc đã duyệt.",
     "Cancelled registrations cannot be changed": "Đăng ký đã hủy thì không thể thay đổi.",
     "A reason is required when rejecting.": "Cần nhập lý do khi từ chối.",
     "Progress notes can only be added to approved registrations": "Chỉ ghi tiến độ cho đăng ký đã được duyệt.",
-    "This period already has registrations; deactivate it instead": "Đợt này đã có đăng ký, không xóa được - hãy tắt kích hoạt.",
-    "end_at must be after start_at.": "Thời gian kết thúc phải sau thời gian bắt đầu.",
     "Student has active registrations": "Sinh viên đang có đăng ký còn hiệu lực, hãy hủy đăng ký trước khi xóa.",
     "Thesis has active registrations": "Đề tài đang có đăng ký còn hiệu lực, hãy hủy đăng ký trước khi xóa.",
 }

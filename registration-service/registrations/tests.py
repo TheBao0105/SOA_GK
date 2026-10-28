@@ -20,7 +20,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import ProgressNote, Registration, RegistrationLock, RegistrationPeriod
+from .models import ProgressNote, Registration, RegistrationLock
 
 STUDENT_URL = "http://127.0.0.1:8001/api/students/"
 THESIS_URL = "http://127.0.0.1:8002/api/theses/"
@@ -37,20 +37,11 @@ FAKE_THESES = {
 }
 
 
-def open_period(**kwargs):
-    """Tạo một đợt đăng ký đang mở (mặc định mỗi sinh viên tối đa 1 đăng ký hiệu lực)."""
-    now = timezone.now()
-    data = {"name": "Đợt test", "start_at": now - timedelta(days=1), "end_at": now + timedelta(days=30)}
-    data.update(kwargs)
-    return RegistrationPeriod.objects.create(**data)
-
-
 class RegistrationTestCase(AuthenticatedAPITestCase):
-    """Đã đăng nhập (ADMIN) và có sẵn một đợt đăng ký đang mở."""
+    """Đã đăng nhập (ADMIN) không cần lịch mở đăng ký."""
 
     def setUp(self):
         super().setUp()
-        self.period = open_period()
 
 
 def make_response(status_code, data=None):
@@ -229,7 +220,7 @@ class RegistrationAuthTests(APITestCase):
     url = "/api/registrations/"
 
     def setUp(self):
-        open_period()
+        super().setUp()
 
     def test_no_token_returns_401_and_does_not_call_other_services(self):
         with patch("registrations.services.external_api.requests.get") as mock_get:
@@ -411,7 +402,7 @@ class RegistrationPermissionTests(RegistrationTestCase):
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertEqual(response.data, {"error": "Thesis Service unavailable"})
 
-    # ---- Admin / service
+    # ---- Quản trị viên / token kỹ thuật
     def test_admin_sees_and_manages_everything(self, mock_get):
         self.login_as("ADMIN", user_id=1)
         self.assertEqual(len(self.client.get(self.url).data), 3)
@@ -436,24 +427,6 @@ class RegistrationWorkflowTests(RegistrationTestCase):
     def register(self, student_id, thesis_id):
         return self.client.post(self.url, {"student_id": student_id, "thesis_id": thesis_id}, format="json")
 
-    # ---- Đợt đăng ký
-    def test_no_open_period(self, mock_get):
-        self.period.delete()
-        response = self.register(1, 1)
-        self.assertEqual(response.data, {"error": "Registration period is closed"})
-        mock_get.assert_not_called()
-
-    def test_period_expired_or_inactive(self, mock_get):
-        self.period.end_at = timezone.now() - timedelta(minutes=1)
-        self.period.save()
-        self.assertEqual(self.register(1, 1).data, {"error": "Registration period is closed"})
-        open_period(is_active=False)
-        self.assertEqual(self.register(1, 1).data, {"error": "Registration period is closed"})
-
-    def test_registration_records_period(self, mock_get):
-        response = self.register(1, 1)
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data["period"], self.period.id)
 
     # ---- Khóa chống đăng ký đồng thời (SQL Server)
     def test_lock_rows_created_before_transaction(self, mock_get):
@@ -499,11 +472,6 @@ class RegistrationWorkflowTests(RegistrationTestCase):
         response = self.register(1, 2)
         self.assertEqual(response.data, {"error": "Student already has an active registration"})
 
-    def test_limit_is_configurable_per_period(self, mock_get):
-        self.period.max_active_per_student = 2
-        self.period.save()
-        self.assertEqual(self.register(1, 1).status_code, 201)
-        self.assertEqual(self.register(1, 2).status_code, 201)
 
     def test_capacity_checked_before_student_limit(self, mock_get):
         THESES_WITH_SUPERVISOR[2]["max_students"] = 1
@@ -521,7 +489,7 @@ class RegistrationWorkflowTests(RegistrationTestCase):
 
     # ---- Hủy và đăng ký lại
     def test_cancel_frees_slot_and_allows_new_registration(self, mock_get):
-        reg = Registration.objects.create(student_id=1, thesis_id=1, period=self.period)
+        reg = Registration.objects.create(student_id=1, thesis_id=1)
         self.login_as("STUDENT", user_id=10, student_id=1)
         response = self.client.post(f"{self.url}{reg.id}/cancel/")
         self.assertEqual(response.data["status"], "CANCELLED")
@@ -551,13 +519,6 @@ class RegistrationWorkflowTests(RegistrationTestCase):
         finally:
             THESES_WITH_SUPERVISOR[1]["max_students"] = 3
 
-    def test_student_cannot_cancel_when_period_closed(self, mock_get):
-        reg = Registration.objects.create(student_id=1, thesis_id=1, period=self.period)
-        self.period.is_active = False
-        self.period.save()
-        self.login_as("STUDENT", user_id=10, student_id=1)
-        response = self.client.post(f"{self.url}{reg.id}/cancel/")
-        self.assertEqual(response.data, {"error": "Registration period is closed"})
 
     def test_admin_can_cancel_approved_but_not_twice(self, mock_get):
         reg = Registration.objects.create(student_id=1, thesis_id=1, status=Registration.Status.APPROVED)
@@ -641,26 +602,3 @@ class RegistrationWorkflowTests(RegistrationTestCase):
         self.assertEqual(self.client.post(url, {"content": "tự chấm"}, format="json").status_code, 403)
         self.assertEqual(self.client.get(f"{self.url}{other.id}/notes/").status_code, 404)
         self.assertEqual(ProgressNote.objects.count(), 1)
-
-    # ---- API đợt đăng ký
-    def test_period_api_permissions(self, mock_get):
-        self.login_as("STUDENT", user_id=10, student_id=1)
-        response = self.client.get("/api/periods/current/")
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.data["is_open"])
-        data = {"name": "Đợt 2", "start_at": "2027-01-01T00:00:00Z", "end_at": "2027-02-01T00:00:00Z"}
-        self.assertEqual(self.client.post("/api/periods/", data, format="json").status_code, 403)
-
-        self.login_as("ADMIN", user_id=1)
-        self.assertEqual(self.client.post("/api/periods/", data, format="json").status_code, 201)
-        bad = {**data, "end_at": "2026-12-01T00:00:00Z"}
-        self.assertIn("end_at", self.client.post("/api/periods/", bad, format="json").data)
-
-    def test_no_current_period(self, mock_get):
-        self.period.delete()
-        self.assertEqual(self.client.get("/api/periods/current/").status_code, 404)
-
-    def test_cannot_delete_period_with_registrations(self, mock_get):
-        Registration.objects.create(student_id=1, thesis_id=1, period=self.period)
-        response = self.client.delete(f"/api/periods/{self.period.id}/")
-        self.assertEqual(response.status_code, 409)

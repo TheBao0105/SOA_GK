@@ -1,4 +1,4 @@
-"""Read-only checks of configured SQL Server connections and pending migrations."""
+"""Kiểm tra (chỉ đọc) kết nối SQL Server đã cấu hình và các migration chưa áp dụng."""
 import json
 import os
 from pathlib import Path

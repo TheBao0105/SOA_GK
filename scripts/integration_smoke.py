@@ -1,5 +1,5 @@
-"""Launch 5 isolated HTTP processes on temporary ports and SQLite databases.
-No mocks, no writes to application databases, .env files or real JWT keys.
+"""Chạy 5 process HTTP tách biệt trên cổng tạm và database SQLite tạm.
+Không mock, không ghi vào database thật, file .env hay khóa JWT thật.
 This validates REST integration, not SQL Server locking.
 """
 import json
@@ -13,7 +13,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timedelta, timezone
 
 import requests
 from cryptography.hazmat.primitives import serialization
@@ -21,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 ROOT=Path(__file__).resolve().parents[1]
 SERVICES={"identity":"identity-service","student":"student-service","thesis":"thesis-service","registration":"registration-service","portal":"web-portal"}
-CRITERIA=[{"code":"work","name":"Chức năng","weight":40},{"code":"design","name":"Kỹ thuật","weight":30},{"code":"report","name":"Báo cáo","weight":20},{"code":"defense","name":"Bảo vệ","weight":10}]
+
 
 
 def stop_process(process):
@@ -93,14 +92,16 @@ def main():
                     time.sleep(0.1)
                 if not ready:
                     raise AssertionError(f"{name} failed to start: "+(tmp/(name+'.log')).read_text(encoding='utf-8')[-3000:])
-            def api(service,method,path,expected,token=None,body=None):
+            def api(service,method,path,expected,token=None,body=None,json_expected=True):
                 response=requests.request(method,urls[service]+path,json=body,headers={'Authorization':'Bearer '+token} if token else {},timeout=15)
                 if response.status_code!=expected:
                     raise AssertionError(f"{service} {method} {path}: expected {expected}, got {response.status_code}: {response.text[:700]}")
-                return response.json() if response.content else None
+                return response.json() if json_expected and response.content else None
             def login(username):
                 return api('identity','POST','/api/auth/login/',200,body={'username':username,'password':password})['access']
             admin=login('admin')
+            api('registration','GET','/api/periods/',404,admin,json_expected=False)
+            api('registration','GET','/api/periods/current/',404,admin,json_expected=False)
             lecturers=[]
             for name in ('gv1','gv2','gv3'):
                 lecturers.append(api('identity','POST','/api/users/',201,admin,{'username':name,'email':name+'@test.local','role':'LECTURER','password':password,'full_name':name})['id'])
@@ -112,7 +113,7 @@ def main():
             assert topic_record['thesis_code']=='DT001'
             topic=topic_record['id']
             steps.append('Student/Thesis APIs allocate SV001/DT001 without manual codes')
-            # A fresh install must support all canonical roles through the real Portal.
+            # Bản cài mới phải đăng nhập được đủ các vai trò qua Portal thật.
             for username in ('admin', 'gv1', 'sv'):
                 with requests.Session() as fresh_browser:
                     page=fresh_browser.get(urls['portal']+'/',timeout=15)
@@ -121,6 +122,8 @@ def main():
                     page=fresh_browser.post(urls['portal']+'/dang-nhap/',data={'username':username,'password':password,'csrfmiddlewaretoken':csrf},timeout=15)
                     assert page.status_code==200 and page.url==urls['portal']+'/',(username,page.status_code,page.url)
                     assert 'Dashboard' in page.text and 'HTTP 403' not in page.text
+                    assert 'Đợt đăng ký' not in page.text
+                    assert fresh_browser.get(urls['portal']+'/dot-dang-ky/',timeout=15).status_code==404
                     assert fresh_browser.get(urls['portal']+'/',timeout=15).url==urls['portal']+'/'
                     if username!='admin':
                         denied=fresh_browser.get(urls['portal']+'/sinh-vien/them/',timeout=15)
@@ -131,30 +134,18 @@ def main():
             assert diagnostic.returncode==0,diagnostic.stdout+diagnostic.stderr
             assert password not in diagnostic.stdout and admin not in diagnostic.stdout
             steps.append('Read-only new-machine login diagnostic passes all real APIs without exposing credentials')
-            now=datetime.now(timezone.utc)
-            period={'name':'Đợt test','start_at':(now-timedelta(days=1)).isoformat(),'end_at':(now+timedelta(days=1)).isoformat(),'is_active':True}
-            api('registration','POST','/api/periods/',201,admin,{**period,'max_active_per_student':1})
             sv=login('sv')
             reg=api('registration','POST','/api/registrations/',201,sv,{'student_id':student,'thesis_id':topic})['id']
             gv1,gv2,gv3=map(login,('gv1','gv2','gv3'))
             api('registration','PATCH',f'/api/registrations/{reg}/',200,gv1,{'status':'APPROVED'})
-            steps.append('Student -> Registration -> Student/Thesis REST -> lecturer approval')
-            grade_period=api('registration','POST','/api/grading/periods/',201,admin,{**period,'criteria':CRITERIA})['id']
-            assessment=api('registration','POST','/api/grading/assessments/',201,admin,{'registration':reg,'period':grade_period})['id']
-            path=f'/api/grading/assessments/{assessment}/'
-            api('registration','POST',path+'assign/',200,admin,{'lecturer_ids':lecturers[:2]})
-            api('registration','GET',path,404,sv)
-            api('registration','POST',path+'scores/',404,gv3,{'scores':{'work':'8'},'submit':False})
-            api('identity','POST','/api/auth/logout/',200,gv3,{})
-            api('thesis','GET','/api/theses/',401 if online else 200,gv3)
-            api('registration','POST',path+'scores/',200,gv1,{'scores':{'work':'8','design':'7','report':'9','defense':'10'},'submit':True})
-            api('registration','POST',path+'publish/',400,admin)
-            api('registration','POST',path+'scores/',200,gv2,{'scores':{c['code']:'9' for c in CRITERIA},'submit':True})
-            published=api('registration','POST',path+'publish/',200,admin)
-            assert published['final_score']=='8.55',published['final_score']
-            api('registration','GET',path,200,sv)
-            api('registration','POST',f'/api/registrations/{reg}/cancel/',409,admin)
-            steps.append('Two assigned examiners -> weighted average 8.55 -> admin publication -> student visibility')
+            steps.append('Registration without schedule -> Student/Thesis REST -> lecturer approval; removed schedule API/Portal return 404')
+            grade=api('registration','POST','/api/grading/grades/',201,gv1,{'registration':reg,'score':'8.5','comment':'Đạt yêu cầu'})
+            assert grade['score']=='8.50'
+            api('registration','POST','/api/grading/grades/',404,gv2,{'registration':reg,'score':'10'})
+            api('registration','POST','/api/grading/grades/',403,sv,{'registration':reg,'score':'10'})
+            rows=api('registration','GET','/api/grading/grades/',200,sv)
+            assert len(rows)==1 and rows[0]['score']=='8.50'
+            steps.append('Supervisor enters 8.50 directly; student immediately sees own grade; other lecturer/student writes denied')
             with requests.Session() as browser:
                 response=browser.get(urls['portal']+'/dang-nhap/',timeout=10)
                 csrf=re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"',response.text).group(1)
@@ -175,18 +166,51 @@ def main():
                 created_topics=api('thesis','GET','/api/theses/?search=Portal%20Automatic',200,admin)
                 assert len(created_topics)==1 and created_topics[0]['thesis_code']=='DT002'
                 steps.append('Portal create forms omit code inputs and save generated SV002/DT002')
-                for page in ('/cham-diem/','/cham-diem/'+str(assessment)+'/','/dot-cham-diem/','/ho-so/','/nhat-ky/'):
+                for page in ('/cham-diem/','/ho-so/','/nhat-ky/'):
                     response=browser.get(urls['portal']+page,timeout=15)
-                    assert response.status_code==200,page
-                response=browser.post(urls['portal']+'/cham-diem/'+str(assessment)+'/',data={'action':'publish'},timeout=10)
-                assert response.status_code==403,'Portal must enforce CSRF'
-            steps.append('Real portal login, grade/detail/period/profile/audit pages and CSRF rejection')
-            api('registration','POST',path+'reopen/',200,admin,{'reason':'Phúc khảo thử nghiệm'})
-            api('registration','GET',path,404,sv)
+                    assert response.status_code==200,(page,response.status_code)
+                assert browser.get(urls['portal']+'/dot-cham-diem/',timeout=10).status_code==404
+            # Giảng viên nhập một điểm số qua Portal như trên trình duyệt thật.
+            with requests.Session() as browser:
+                page=browser.get(urls['portal']+'/dang-nhap/',timeout=10)
+                csrf=re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"',page.text).group(1)
+                browser.post(urls['portal']+'/dang-nhap/',data={'username':'gv1','password':password,'csrfmiddlewaretoken':csrf},timeout=15)
+                page=browser.get(urls['portal']+f'/cham-diem/{reg}/',timeout=15)
+                assert page.status_code==200 and 'name="score"' in page.text
+                csrf=re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"',page.text).group(1)
+                page=browser.post(urls['portal']+f'/cham-diem/{reg}/',data={'score':'9.25','comment':'Cập nhật điểm','csrfmiddlewaretoken':csrf},timeout=15)
+                assert page.status_code==200 and page.url==urls['portal']+'/cham-diem/'
+                assert '9.25' in page.text
+                assert requests.post(urls['portal']+f'/cham-diem/{reg}/',cookies=browser.cookies,data={'score':'10'},timeout=15).status_code==403
+            updated=api('registration','GET',f"/api/grading/grades/{grade['id']}/",200,sv)
+            assert updated['score']=='9.25'
+            history=api('registration','GET',f"/api/grading/grades/{grade['id']}/history/",200,admin)
+            assert history[0]['detail']['before']['score']=='8.50'
+            api('registration','POST',f'/api/registrations/{reg}/cancel/',409,admin)
+            # Giao diện Admin có xem/sửa/xóa điểm; GET hiện xác nhận, POST chỉ xóa điểm.
+            with requests.Session() as manager:
+                page=manager.get(urls['portal']+'/dang-nhap/',timeout=10)
+                csrf=re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"',page.text).group(1)
+                manager.post(urls['portal']+'/dang-nhap/',data={'username':'admin','password':password,'csrfmiddlewaretoken':csrf},timeout=15)
+                page=manager.get(urls['portal']+f'/cham-diem/{reg}/chi-tiet/',timeout=15)
+                assert page.status_code==200 and '9.25' in page.text
+                page=manager.get(urls['portal']+f'/cham-diem/{reg}/xoa/',timeout=15)
+                assert page.status_code==200 and 'Xác nhận xóa điểm' in page.text
+                assert api('registration','GET',f"/api/grading/grades/{grade['id']}/",200,sv)['score']=='9.25'
+                csrf=re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"',page.text).group(1)
+                page=manager.post(urls['portal']+f'/cham-diem/{reg}/xoa/',data={'csrfmiddlewaretoken':csrf},timeout=15)
+                assert page.status_code==200 and 'Chưa chấm' in page.text
+                assert api('registration','GET','/api/grading/grades/',200,sv)==[]
+                regraded=api('registration','POST','/api/grading/grades/',201,admin,{'registration':reg,'score':'8','comment':'Chấm lại'})
+                history=api('registration','GET',f"/api/grading/grades/{regraded['id']}/history/",200,admin)
+                assert any(e['action']=='DELETED' for e in history)
+            steps.append('Admin detail/delete confirmation/POST deletion/regrade preserve full score history')
+            api('identity','POST','/api/auth/logout/',200,gv3,{})
+            api('thesis','GET','/api/theses/',401 if online else 200,gv3)
             api('identity','PATCH',f'/api/users/{lecturers[0]}/',200,admin,{'is_active':False})
             api('thesis','GET','/api/theses/',401 if online else 200,gv1)
-            steps.append('Reopen hides grade; logout/deactivation '+('revoke downstream access' if online else 'leave offline access valid until expiry'))
-            # Verify demo seeding twice on the isolated HTTP services, including password preservation.
+            steps.append('Portal direct score edit -> 9.25, visible to student, history preserved, CSRF and grade protection verified')
+            # Chạy seed demo hai lần trên các service tách biệt, kiểm tra mật khẩu cũ được giữ nguyên.
             prep_env={**env,'SOA_DEMO_ADMIN_PASSWORD':password}
             prep_cmd=[sys.executable,'-B',str(ROOT/'scripts'/'prepare_demo.py'),'--tag','itest','--report-dir',str(tmp)]
             first=subprocess.run(prep_cmd,cwd=ROOT,env=prep_env,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=60)
@@ -204,16 +228,16 @@ def main():
             assert [a['id'] for a in seeded['accounts']]==[a['id'] for a in repeated['accounts']]
             api('identity','POST','/api/auth/login/',200,body={'username':demo_user['username'],'password':new_password})
             steps.append('REST demo seed is repeatable, links actual student IDs and preserves existing passwords')
-            # A remote student lookup outage must not create a partial registration.
+            # Student Service tắt thì không được tạo đăng ký dở dang.
             topic2=api('thesis','POST','/api/theses/',201,admin,{'thesis_code':'TEST02','title':'Đề tài thử timeout','max_students':1})['id']
             student_process=processes[list(SERVICES).index('student')]
             stop_process(student_process)
             api('registration','POST','/api/registrations/',503,admin,{'student_id':student,'thesis_id':topic2})
             steps.append('Student Service outage -> registration returns 503 without a partial write')
-            # A real identity outage must become a controlled 503.
+            # Identity tắt thật thì phải trả 503 có kiểm soát.
             identity_process=processes[list(SERVICES).index('identity')]
             stop_process(identity_process)
-            api('registration','GET','/api/grading/assessments/',503 if online else 200,admin)
+            api('registration','GET','/api/grading/grades/',503 if online else 200,admin)
             steps.append('Identity outage -> '+('HTTP 503 with online account checks' if online else 'HTTP 200 with offline JWT verification'))
             result={'passed':True,'auth_mode':options.auth_mode,'mode':'isolated SQLite databases, five real HTTP processes, no mocks','steps':steps}
             (workspace/'integration-result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')

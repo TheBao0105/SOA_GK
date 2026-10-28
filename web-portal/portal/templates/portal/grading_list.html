@@ -1,10 +1,13 @@
 {% extends 'portal/base.html' %}
-{% block title %}Chấm điểm{% endblock %}
+{% block title %}Điểm đề tài{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3"><h1>{% if current_user.is_student %}Kết quả của tôi{% else %}Hồ sơ chấm điểm{% endif %}</h1>
-{% if current_user.is_admin %}<div><a class="btn btn-outline-primary" href="{% url 'grading_period_list' %}">Đợt chấm</a> <a class="btn btn-primary" href="{% url 'assessment_create' %}">Tạo hồ sơ</a></div>{% endif %}</div>
-<p class="text-muted">Thang điểm 10. Điểm tổng kết là trung bình điểm theo trọng số của các giảng viên được phân công. Sinh viên chỉ thấy kết quả đã công bố.</p>
-<div class="table-responsive"><table class="table table-bordered bg-white"><thead><tr><th>Hồ sơ</th><th>Đợt chấm</th><th>Sinh viên</th><th>Đề tài</th><th>Trạng thái</th><th>Điểm tổng kết</th><th></th></tr></thead><tbody>
-{% for a in assessments %}<tr><td>#{{ a.id }}</td><td>{{ a.period_name }}</td><td>{{ a.student_name }}</td><td>{{ a.thesis_title }}</td><td>{% include 'portal/_grading_status.html' with status=a.status %}</td><td>{{ a.final_score|default_if_none:'—' }}</td><td><a href="{% url 'assessment_detail' a.id %}">Chi tiết</a></td></tr>
-{% empty %}<tr><td colspan="7" class="text-center text-muted">Chưa có hồ sơ chấm điểm trong phạm vi của bạn.</td></tr>{% endfor %}</tbody></table></div>
+<h1 class="mb-3">{% if current_user.is_student %}Điểm của tôi{% else %}Quản lý điểm đề tài{% endif %}</h1>
+<p class="text-muted">Admin và giảng viên hướng dẫn nhập điểm trực tiếp theo thang 10 cho đăng ký đã duyệt. Kết quả hiển thị ngay sau khi lưu.</p>
+<div class="table-responsive"><table class="table table-bordered bg-white"><thead><tr><th>Sinh viên</th><th>Đề tài</th><th>Điểm / 10</th><th>Nhận xét</th><th>Người chấm</th><th>Thao tác</th></tr></thead><tbody>
+{% for r in rows %}<tr><td>{{ r.student_name }}</td><td>{{ r.thesis_title }}</td><td>{% if r.grade %}{{ r.grade.score }}{% else %}Chưa chấm{% endif %}</td><td>{{ r.grade.comment|default:'—'|linebreaksbr }}</td><td>{{ r.grade.lecturer_name|default:'—' }}</td><td class="text-nowrap"><a class="btn btn-sm btn-outline-info" href="{% url 'grade_detail' r.id %}">Chi tiết</a>
+{% if current_user.is_admin or current_user.is_lecturer %}
+<a class="btn btn-sm btn-primary" href="{% url 'grade_edit' r.id %}">{% if r.grade %}Sửa{% else %}Chấm điểm{% endif %}</a>
+{% if r.grade %}<a class="btn btn-sm btn-outline-danger" href="{% url 'grade_delete' r.id %}">Xóa</a>{% endif %}
+{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6" class="text-center text-muted">Chưa có đăng ký đã duyệt trong phạm vi của bạn.</td></tr>{% endfor %}</tbody></table></div>
 {% endblock %}

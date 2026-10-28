@@ -1,7 +1,6 @@
 from rest_framework.routers import DefaultRouter
-from .views import AssessmentViewSet, GradingPeriodViewSet
+from .views import GradeViewSet
 
 router = DefaultRouter()
-router.register("periods", GradingPeriodViewSet, basename="grading-period")
-router.register("assessments", AssessmentViewSet, basename="assessment")
+router.register("grades", GradeViewSet, basename="grade")
 urlpatterns = router.urls

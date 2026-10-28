@@ -1,41 +1,5 @@
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import IntegrityError, models, transaction
-from django.utils import timezone
-
-
-class RegistrationPeriod(models.Model):
-    """
-    Bảng DOTDANGKY - đợt đăng ký đề tài (ví dụ "Đợt 1 - HK1 2026-2027").
-
-    Sinh viên chỉ đăng ký / hủy đăng ký được khi có đợt đang mở.
-    """
-
-    name = models.CharField(max_length=100)
-    start_at = models.DateTimeField()
-    end_at = models.DateTimeField()
-    is_active = models.BooleanField(default=True)
-    # Số đăng ký còn hiệu lực (PENDING / APPROVED) tối đa của MỘT sinh viên
-    max_active_per_student = models.PositiveSmallIntegerField(
-        default=1, validators=[MinValueValidator(1)]
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "dotdangky"
-        ordering = ["-start_at", "-id"]
-
-    def is_open(self, now=None):
-        now = now or timezone.now()
-        return self.is_active and self.start_at <= now <= self.end_at
-
-    @classmethod
-    def current(cls):
-        """Đợt đang mở (nếu có nhiều đợt trùng thời gian thì lấy đợt bắt đầu sau cùng)."""
-        now = timezone.now()
-        return cls.objects.filter(is_active=True, start_at__lte=now, end_at__gte=now).order_by("-start_at").first()
-
-    def __str__(self):
-        return self.name
 
 
 class Registration(models.Model):
@@ -61,10 +25,6 @@ class Registration(models.Model):
     registered_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
 
-    # Đợt đăng ký (cùng database nên dùng ForeignKey được). Đăng ký cũ có thể để trống.
-    period = models.ForeignKey(
-        RegistrationPeriod, null=True, blank=True, on_delete=models.PROTECT, related_name="registrations"
-    )
     # Ai duyệt / từ chối, lúc nào, vì sao (id tài khoản bên Identity Service)
     processed_by = models.PositiveIntegerField(null=True, blank=True)
     processed_at = models.DateTimeField(null=True, blank=True)
